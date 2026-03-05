@@ -212,6 +212,11 @@ endif()
 # {PaRSEC,MADNESS} rely on usability of {BLAS,LAPACK}_LIBRARIES
 include(SanitizeLinalgLibraries)
 SanitizeLinalgLibraries()
+# StarPu
+include(FindOrFetchStarPu)
+if (STARPU_FOUND)
+  message(STATUS ${STARPU_FOUND})
+endif()
 # PaRSEC
 include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
