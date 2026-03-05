@@ -1,7 +1,7 @@
 include(FindPkgConfig)
-set(STARPU_VERSION "1.4")
-set(_STARPU_TARBALL "https://files.inria.fr/starpu/starpu-${STARPU_VERSION}/starpu-${STARPU_VERSION}.tar.gz")
-set(_STARPU_SOURCE "${PROJECT_SOURCE_DIR}/starpu-${STARPU_VERSION}")
+set(STARPU_VERSION "1.4.4")
+set(STARPU_TARBALL "https://files.inria.fr/starpu/starpu-${STARPU_VERSION}/starpu-${STARPU_VERSION}.tar.gz")
+set(STARPU_SOURCE "${PROJECT_SOURCE_DIR}/starpu-${STARPU_VERSION}")
 set(STARPU_FOUND FALSE)
 
 if(PKG_CONFIG_FOUND)
@@ -9,6 +9,7 @@ if(PKG_CONFIG_FOUND)
 endif()
 if(STARPU_FOUND)
 else()
+  include(ExternalProject)
   ExternalProject_Add(starpu
     PREFIX "${PROJECT_BINARY_DIR}"
     URL ${STARPU_TARBALL}
