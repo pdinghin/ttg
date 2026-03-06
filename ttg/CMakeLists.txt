@@ -278,3 +278,37 @@ if (TARGET PaRSEC::parsec)
                   LINK_LIBRARIES "${ttg-parsec-deps}"
                   COMPILE_DEFINITIONS TTG_USE_PARSEC=1)
 endif(TARGET PaRSEC::parsec)
+
+if(TARGET MyProject::StarPU)
+  set(ttg-starpu-headers
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/buffer.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/device.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/devicefunc.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/devicescratch.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/fwd.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/import.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ptr.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/parsec-ext.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/parsec_data.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/task.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/thread_local.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ttg.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ttg_data_copy.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ttvalue.h
+          )
+  find_package(MPI)
+  set(ttg-starpu-deps "ttg;MPI::MPI_CXX;MyProject::StarPU")
+  # parsec depends on TTG's serialization layer since it does not provide its own
+  # if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET ttg-serialization-boost)
+  #   list(APPEND ttg-parsec-deps ttg-serialization-boost)
+  # elseif(TARGET ttg-serialization-madness)
+  #   list(APPEND ttg-parsec-deps ttg-serialization-madness)
+  # else()
+  #   message(WARNING "missing full-featured serialization support for ttg-parsec: either TTG_PARSEC_USE_BOOST_SERIALIZATION=OFF or Boost not found, and MADNESS not found")
+  # endif()
+  add_ttg_library(ttg-starpu "${ttg-starpu-headers}"
+                  PUBLIC_HEADER "${ttg-starpu-headers}"
+                  LINK_LIBRARIES "${ttg-starpu-deps}"
+                  COMPILE_DEFINITIONS TTG_USE_STARPU=1)
+
+endif(TARGET MyProject::StarPU)

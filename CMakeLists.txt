@@ -75,6 +75,9 @@ option(TTG_ENABLE_COROUTINES "Whether to enable C++ coroutines, needed for accel
 option(TTG_FETCH_BOOST "Whether to fetch+build Boost, if missing" ON)
 option(TTG_IGNORE_BUNDLED_EXTERNALS "Whether to skip installation and use of bundled external dependencies (Boost.CallableTraits)" OFF)
 option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
+
+option(USE_PARSEC "Wether to enable Parsec" OFF)
+option(USE_MADNESS "Wether to enable Madness" OFF)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
 if (FORCE_COLORED_OUTPUT)
@@ -218,15 +221,19 @@ if (TARGET MyProject::StarPU)
   message(STATUS "STARPU_FOUND=1")
 endif(TARGET MyProject::StarPU)
 # PaRSEC
-include(FindOrFetchPARSEC)
-if (TARGET PaRSEC::parsec)
-  message(STATUS "PARSEC_FOUND=1")
-endif(TARGET PaRSEC::parsec)
+if(USE_PARSEC)
+  include(FindOrFetchPARSEC)
+  if (TARGET PaRSEC::parsec)
+    message(STATUS "PARSEC_FOUND=1")
+  endif(TARGET PaRSEC::parsec)
+endif()
 # MADNESS
-include(FindOrFetchMADNESS)
-if (TARGET MADworld)
-  message(STATUS "MADNESS_FOUND=1")
-endif(TARGET MADworld)
+if(USE_MADNESS)
+  include(FindOrFetchMADNESS)
+  if (TARGET MADworld)
+    message(STATUS "MADNESS_FOUND=1")
+  endif(TARGET MADworld)
+endif()
 
 ####################################################
 #### Check for MPIX_Query_[cuda|rocm]_support
