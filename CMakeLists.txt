@@ -28,7 +28,7 @@ endif()
 project(ttg
     VERSION ${TTG_VERSION}
     DESCRIPTION "Template Task Graph: flowgraph programming model for distributed-memory computing"
-    LANGUAGES CXX
+    LANGUAGES CXX 
     HOMEPAGE_URL "https://tesseorg.github.io/ttg/")
 
 if (NOT DEFINED CMAKE_CXX_STANDARD)

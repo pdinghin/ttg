@@ -1,5 +1,4 @@
 include(FindPkgConfig)
-set(STARPU_VERSION "1.4.4")
 set(STARPU_TARBALL "https://files.inria.fr/starpu/starpu-${STARPU_VERSION}/starpu-${STARPU_VERSION}.tar.gz")
 set(STARPU_SOURCE "${PROJECT_SOURCE_DIR}/starpu-${STARPU_VERSION}")
 set(STARPU_FOUND FALSE)
@@ -16,7 +15,7 @@ else()
     SOURCE_DIR ${STARPU_SOURCE}
     DOWNLOAD_EXTRACT_TIMESTAMP ON
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
-                      --prefix=${CMAKE_INSTALL_PREFIX}
+                      --prefix=${PROJECT_BINARY_DIR}/starpu
                       ${CONFIGURE_DEBUG_ARG}
                       --enable-fast
                       --enable-blas-lib=none
