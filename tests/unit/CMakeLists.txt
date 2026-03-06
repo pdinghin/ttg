@@ -31,16 +31,19 @@ add_ttg_executable(serialization serialization.cc unit_main.cpp
                    COMPILE_DEFINITIONS $<$<TARGET_EXISTS:BTAS::BTAS>:TTG_HAS_BTAS=1>)
 
 # Boost serialization test: checks low-level codegen
-if (TTG_PARSEC_USE_BOOST_SERIALIZATION)
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND USE_PARSEC)
     add_ttg_executable(serialization_boost serialization_boost.cc
                         LINK_LIBRARIES ttg-serialization-boost RUNTIMES "parsec")
-endif(TTG_PARSEC_USE_BOOST_SERIALIZATION)
+endif(TTG_PARSEC_USE_BOOST_SERIALIZATION AND USE_PARSEC)
 
 # TODO: convert into unit test
 #if (TARGET MADworld)
 #add_executable(splitmd_serialization splitmd_serialization.cc unit_main.cpp)
 #endif(TARGET MADworld)
 
-
-catch_discover_tests(serialization-parsec TEST_PREFIX "ttg/test/unit/")
-catch_discover_tests(serialization-mad TEST_PREFIX "ttg/test/unit/")
+if(USE_PARSEC)
+    catch_discover_tests(serialization-parsec TEST_PREFIX "ttg/test/unit/")
+endif()
+if(USE_MADNESS)
+    catch_discover_tests(serialization-mad TEST_PREFIX "ttg/test/unit/")
+endif()
