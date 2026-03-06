@@ -2,12 +2,26 @@ include(FindPkgConfig)
 set(STARPU_TARBALL "https://files.inria.fr/starpu/starpu-${STARPU_VERSION}/starpu-${STARPU_VERSION}.tar.gz")
 set(STARPU_SOURCE "${PROJECT_SOURCE_DIR}/starpu-${STARPU_VERSION}")
 set(STARPU_FOUND FALSE)
+add_library(MyProject::StarPU INTERFACE IMPORTED GLOBAL)
 
 if(PKG_CONFIG_FOUND)
   pkg_search_module(STARPU IMPORTED_TARGET starpu-1.4)
+  if(TARGET PkgConfig::STARPU)
+    target_link_libraries(MyProject::Runtime INTERFACE PkgConfig::STARPU)
+    message(STATUS "Found StarPU and mapped to MyProject::Runtime")
+  endif()
 endif()
 if(STARPU_FOUND)
 else()
+
+  set(STARPU_INSTALL_DIR "${PROJECT_BINARY_DIR}/starpu")
+  add_library(StarPU_Local STATIC IMPORTED GLOBAL)
+  set(STARPU_LIB_PATH "${STARPU_INSTALL_DIR}/lib/libstarpu-1.4${CMAKE_STATIC_LIBRARY_SUFFIX}")
+  set(STARPU_INCLUDE_DIR "${STARPU_INSTALL_DIR}/include/starpu/1.4")
+  set_target_properties(StarPU_Local PROPERTIES
+  IMPORTED_LOCATION "${STARPU_LIB_PATH}"
+  INTERFACE_INCLUDE_DIRECTORIES "${STARPU_INCLUDE_DIR}"
+  )
   include(ExternalProject)
   ExternalProject_Add(starpu
     PREFIX "${PROJECT_BINARY_DIR}"
@@ -34,6 +48,8 @@ else()
                       CXXFLAGS=${CMAKE_CXX_FLAGS}
     BUILD_COMMAND     ${CMAKE_MAKE_PROGRAM} -j${PARALLEL_JOBS}
     )
-
+  add_dependencies(StarPU_Local starpu_build)
+  target_link_libraries(MyProject::StarPU INTERFACE StarPU_Local)
+  message(STATUS "Using Local StarPU (via ExternalProject)")
   set(STARPU_FOUND TRUE)
 endif()

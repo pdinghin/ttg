@@ -214,9 +214,9 @@ include(SanitizeLinalgLibraries)
 SanitizeLinalgLibraries()
 # StarPu
 include(FindOrFetchStarPu)
-if (STARPU_FOUND)
-  message(STATUS ${STARPU_FOUND})
-endif()
+if (TARGET MyProject::StarPU)
+  message(STATUS "STARPU_FOUND=1")
+endif(TARGET MyProject::StarPU)
 # PaRSEC
 include(FindOrFetchPARSEC)
 if (TARGET PaRSEC::parsec)
