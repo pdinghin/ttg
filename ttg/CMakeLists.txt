@@ -190,7 +190,7 @@ if (TARGET MADworld)
   list(APPEND ttg-serialization-deps MADworld)
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
 endif(TARGET MADworld)
-if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization)
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
   list(APPEND ttg-serialization-deps Boost::serialization)
   list(APPEND ttg-serialization-boost-deps Boost::serialization)
   if (TARGET Boost::iostreams)  # using modularized Boost?
@@ -198,7 +198,7 @@ if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization)
       list(APPEND ttg-serialization-boost-deps Boost::iostreams)
   endif()
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_BOOST=1)
-endif (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization)
+endif (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
 
 add_ttg_library(ttg-serialization
                 "${ttg-serialization-sources}"
@@ -214,13 +214,13 @@ if (TARGET MADworld)
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_MADNESS=1")
 endif(TARGET MADworld)
 # make boost-only serialization target
-if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization)
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
   add_ttg_library(ttg-serialization-boost
           "${ttg-serialization-sources}"
           PUBLIC_HEADER "${ttg-serialization-headers}"
           LINK_LIBRARIES "${ttg-serialization-boost-deps}"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_BOOST=1")
-endif(TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization)
+endif(TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
 
 #########################
 ####### MADNESS-specific
