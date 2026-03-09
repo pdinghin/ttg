@@ -29,7 +29,7 @@ else()
     SOURCE_DIR ${STARPU_SOURCE}
     DOWNLOAD_EXTRACT_TIMESTAMP ON
     CONFIGURE_COMMAND <SOURCE_DIR>/configure
-                      --prefix=${PROJECT_BINARY_DIR}/starpu
+                      --prefix=${CMAKE_INSTALL_PREFIX}
                       ${CONFIGURE_DEBUG_ARG}
                       --enable-fast
                       --enable-blas-lib=none
