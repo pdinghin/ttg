@@ -47,6 +47,8 @@ macro(add_ttg_executable)
             message(FATAL_ERROR "add_ttg_executable: MADNESS runtime is not available, but requested")
         elseif(r STREQUAL "parsec" AND NOT TARGET PaRSEC::parsec)
             message(FATAL_ERROR "add_ttg_executable: PaRSEC runtime is not available, but requested")
+        elseif(r STREQUAL "starpu" AND NOT TARGET MyProject::StarPU)
+            message(FATAL_ERROR "add_ttg_executable: StarPU runtime is not available, but requested")
         endif()
     endforeach()
 
