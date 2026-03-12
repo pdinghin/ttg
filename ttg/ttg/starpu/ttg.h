@@ -856,18 +856,18 @@ namespace ttg_starpu {
 
   namespace detail {
     //TODO: Change to StarpuTTGBase with stapu hash table
-    struct ParsecTTBase {
+    struct StarPUTTBase {
      protected:
-      //  static std::map<int, ParsecBaseTT*> function_id_to_instance;
-      parsec_hash_table_t tasks_table;
-      parsec_hash_table_t task_constraint_table;
-      parsec_task_class_t self;
+      //  static std::map<int, ParsecBaseTT*> function_id_to_instance; Déjà commenté
+      // parsec_hash_table_t tasks_table;
+      // parsec_hash_table_t task_constraint_table;
+      // parsec_task_class_t self;
     };
 
   }  // namespace detail
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
-  class TT : public ttg::TTBase, detail::ParsecTTBase {
+  class TT : public ttg::TTBase, detail::StarPUTTBase {
    private:
     /// preconditions
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
@@ -881,7 +881,7 @@ namespace ttg_starpu {
     static_assert((ttg::meta::none_has_reference_v<input_valueTs>), "Input typelist cannot contain reference types");
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
 
-    parsec_mempool_t mempools;
+    //parsec_mempool_t mempools;
 
     // check for a non-type member named have_cuda_op
     template <typename T>
@@ -1022,7 +1022,7 @@ namespace ttg_starpu {
     // For now use same type for unary/streaming input terminals, and stream reducers assigned at runtime
     ttg::meta::detail::input_reducers_t<actual_input_tuple_type>
         input_reducers;  //!< Reducers for the input terminals (empty = expect single value)
-    std::array<parsec_task_class_t*, numins> inpute_reducers_taskclass = { nullptr };
+    //std::array<parsec_task_class_t*, numins> inpute_reducers_taskclass = { nullptr };
     std::array<std::size_t, numins> static_stream_goal = { std::numeric_limits<std::size_t>::max() };
     int num_pullins = 0;
 
@@ -1166,7 +1166,7 @@ namespace ttg_starpu {
           assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
         }
         task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
-        detail::parsec_ttg_caller = nullptr;
+        // detail::parsec_ttg_caller = nullptr;
         task->suspended_task_address = suspended_task_address;
       }
       else
@@ -1292,12 +1292,12 @@ namespace ttg_starpu {
         if constexpr(!val_is_void) {
           /* the copies to reduce out of */
           detail::ttg_data_copy_t *source_copy;
-          parsec_list_item_t *item;
-          item = parsec_lifo_pop(&parent_task->streams[i].reduce_copies);
-          if (nullptr == item) {
-            // maybe someone is changing the goal right now
-            break;
-          }
+          // parsec_list_item_t *item;
+          // item = parsec_lifo_pop(&parent_task->streams[i].reduce_copies);
+          // if (nullptr == item) {
+          //   // maybe someone is changing the goal right now
+          //   break;
+          // }
           source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
           assert(target_copy->num_readers() == target_copy->mutable_tag);
           assert(source_copy->num_readers() > 0);
@@ -1551,10 +1551,10 @@ namespace ttg_starpu {
                   std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
-                    detail::foreach_starpu_data(val, [&](parsec_data_t* data){
-                      /* decrement readers we incremented before the transfer */
-                      parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
-                    });
+                    // detail::foreach_starpu_data(val, [&](parsec_data_t* data){
+                    //   /* decrement readers we incremented before the transfer */
+                    //   parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
+                    // });
                     copy->drop_ref();
                   });
               return activation;
@@ -1643,15 +1643,15 @@ namespace ttg_starpu {
               }
             } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
               if (inline_data) {
-                detail::foreach_starpu_data(val, [&](parsec_data_t* data){
-                  read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
-                });
+                // detail::foreach_starpu_data(val, [&](parsec_data_t* data){
+                //   read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+                // });
               } else {
                 auto activation = create_activation_fn();
-                detail::foreach_starpu_data(val, [&](parsec_data_t* data){
-                  parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
-                  handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
-                });
+                // detail::foreach_starpu_data(val, [&](parsec_data_t* data){
+                //   parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
+                //   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
+                // });
               }
             }
 
