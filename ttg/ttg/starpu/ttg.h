@@ -351,38 +351,38 @@ namespace ttg_starpu {
 
   namespace detail {
     //TODO: vérify we can use or create starpu_symbol_t
-    const starpu_symbol_t starpu_taskclass_param0 = {
-      .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
-      .name = "HASH0",
-      .context_index = 0,
-      .min = nullptr,
-      .max = nullptr,
-      .expr_inc = nullptr,
-      .cst_inc = 0 };
-    const starpu_symbol_t starpu_taskclass_param1 = {
-      .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
-      .name = "HASH1",
-      .context_index = 1,
-      .min = nullptr,
-      .max = nullptr,
-      .expr_inc = nullptr,
-      .cst_inc = 0 };
-    const starpu_symbol_t starpu_taskclass_param2 = {
-      .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
-      .name = "KEY0",
-      .context_index = 2,
-      .min = nullptr,
-      .max = nullptr,
-      .expr_inc = nullptr,
-      .cst_inc = 0 };
-    const starpu_symbol_t starpu_taskclass_param3 = {
-      .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
-      .name = "KEY1",
-      .context_index = 3,
-      .min = nullptr,
-      .max = nullptr,
-      .expr_inc = nullptr,
-      .cst_inc = 0 };
+    // const starpu_symbol_t starpu_taskclass_param0 = {
+    //   .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
+    //   .name = "HASH0",
+    //   .context_index = 0,
+    //   .min = nullptr,
+    //   .max = nullptr,
+    //   .expr_inc = nullptr,
+    //   .cst_inc = 0 };
+    // const starpu_symbol_t starpu_taskclass_param1 = {
+    //   .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
+    //   .name = "HASH1",
+    //   .context_index = 1,
+    //   .min = nullptr,
+    //   .max = nullptr,
+    //   .expr_inc = nullptr,
+    //   .cst_inc = 0 };
+    // const starpu_symbol_t starpu_taskclass_param2 = {
+    //   .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
+    //   .name = "KEY0",
+    //   .context_index = 2,
+    //   .min = nullptr,
+    //   .max = nullptr,
+    //   .expr_inc = nullptr,
+    //   .cst_inc = 0 };
+    // const starpu_symbol_t starpu_taskclass_param3 = {
+    //   .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
+    //   .name = "KEY1",
+    //   .context_index = 3,
+    //   .min = nullptr,
+    //   .max = nullptr,
+    //   .expr_inc = nullptr,
+    //   .cst_inc = 0 };
 
     inline ttg_data_copy_t *find_copy_in_task(starpu_ttg_task_base_t *task, const void *ptr) {
       ttg_data_copy_t *res = nullptr;
@@ -466,7 +466,7 @@ namespace ttg_starpu {
 
 #if 0
     template <std::size_t... IS, typename Key = keyT>
-    void invoke_pull_terminals(std::index_sequence<IS...>, const Key &key, detail::parsec_ttg_task_base_t *task) {
+    void invoke_pull_terminals(std::index_sequence<IS...>, const Key &key, detail::starpu_ttg_task_base_t *task) {
       int junk[] = {0, (invoke_pull_terminal<IS>(
                             std::get<IS>(input_terminals), key, task),
                         0)...};
@@ -477,11 +477,11 @@ namespace ttg_starpu {
     template<typename T>
     inline void transfer_ownership_impl(T&& arg, int device) {
       if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
-        detail::foreach_starpu_data(arg, [&](parsec_data_t *data){
-          // parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
-          /* make sure we increment the version since we will modify the data */
-          data->device_copies[0]->version++;
-        });
+        // detail::foreach_starpu_data(arg, [&](parsec_data_t *data){
+        //   // parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
+        //   /* make sure we increment the version since we will modify the data */
+        //   data->device_copies[0]->version++;
+        // });
       }
     }
 
@@ -737,27 +737,27 @@ namespace ttg_starpu {
       int provided;
       MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
       if (!provided)
-        throw std::runtime_error("ttg_parsec::ttg_initialize: MPI_Init_thread did not provide MPI_THREAD_MULTIPLE");
+        throw std::runtime_error("ttg_starpu::ttg_initialize: MPI_Init_thread did not provide MPI_THREAD_MULTIPLE");
       detail::initialized_mpi() = true;
     } else {  // no way to test that MPI was initialized with MPI_THREAD_MULTIPLE, cross fingers and proceed
     }
 
     if (num_threads < 1) num_threads = ttg::detail::num_threads();
-    auto world_ptr = new ttg_parsec::WorldImpl{&argc, &argv, num_threads, ctx};
+    auto world_ptr = new ttg_starpu::WorldImpl{&argc, &argv, num_threads, ctx};
     std::shared_ptr<ttg::base::WorldImplBase> world_sptr{static_cast<ttg::base::WorldImplBase *>(world_ptr)};
     ttg::World world{std::move(world_sptr)};
     ttg::detail::set_default_world(std::move(world));
 
     // query the first device ID
     detail::first_device_id = -1;
-    for (int i = 0; i < parsec_nb_devices; ++i) {
-      bool is_gpu = parsec_mca_device_is_gpu(i);
-      if (detail::first_device_id == -1 && is_gpu) {
-        detail::first_device_id = i;
-      } else if (detail::first_device_id > -1 && !is_gpu) {
-        throw std::runtime_error("PaRSEC: Found non-GPU device in GPU ID range!");
-      }
-    }
+    // for (int i = 0; i < starpu_nb_devices; ++i) {
+    //   bool is_gpu = parsec_mca_device_is_gpu(i);
+    //   if (detail::first_device_id == -1 && is_gpu) {
+    //     detail::first_device_id = i;
+    //   } else if (detail::first_device_id > -1 && !is_gpu) {
+    //     throw std::runtime_error("PaRSEC: Found non-GPU device in GPU ID range!");
+    //   }
+    // }
 
     /* parse the maximum inline size */
     const char* ttg_max_inline_cstr = std::getenv("TTG_MAX_INLINE");
@@ -770,21 +770,21 @@ namespace ttg_starpu {
 
     bool all_peer_access = true;
     /* check whether all GPUs can access all peer GPUs */
-    for (int i = 0; (i < parsec_nb_devices) && all_peer_access; ++i) {
-      parsec_device_module_t *idevice = parsec_mca_device_get(i);
-      if (PARSEC_DEV_IS_GPU(idevice->type)) {
-        parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)idevice;
-        for (int j = 0; (j < parsec_nb_devices) && all_peer_access; ++j) {
-          if (i != j) { // because no device can access itself, says PaRSEC
-            parsec_device_module_t *jdevice = parsec_mca_device_get(j);
-            if (PARSEC_DEV_IS_GPU(jdevice->type)) {
-              all_peer_access &= (gpu_device->peer_access_mask & (1<<j)) ? true : false;
-            }
-          }
-        }
-      }
-    }
-    detail::all_devices_peer_access = all_peer_access;
+    // for (int i = 0; (i < parsec_nb_devices) && all_peer_access; ++i) {
+    //   parsec_device_module_t *idevice = parsec_mca_device_get(i);
+    //   if (PARSEC_DEV_IS_GPU(idevice->type)) {
+    //     parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)idevice;
+    //     for (int j = 0; (j < parsec_nb_devices) && all_peer_access; ++j) {
+    //       if (i != j) { // because no device can access itself, says PaRSEC
+    //         parsec_device_module_t *jdevice = parsec_mca_device_get(j);
+    //         if (PARSEC_DEV_IS_GPU(jdevice->type)) {
+    //           all_peer_access &= (gpu_device->peer_access_mask & (1<<j)) ? true : false;
+    //         }
+    //       }
+    //     }
+    //   }
+    // }
+    // detail::all_devices_peer_access = all_peer_access;
   }
   inline void ttg_finalize() {
     // We need to notify the current taskpool of termination if we are in user termination detection mode
@@ -793,7 +793,7 @@ namespace ttg_starpu {
       ttg::default_execution_context().impl().final_task();
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
     detail::ptr_impl::drop_all_ptr();
-    ttg::detail::destroy_worlds<ttg_parsec::WorldImpl>();
+    ttg::detail::destroy_worlds<ttg_starpu::WorldImpl>();
     if (detail::initialized_mpi()) MPI_Finalize();
   }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
@@ -1951,7 +1951,7 @@ namespace ttg_starpu {
             detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
 
             /* enqueue the data copy to be reduced */
-            parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
+            // parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
             submit_reducer_task(task);
           }
         } else {
@@ -2036,7 +2036,7 @@ namespace ttg_starpu {
         assert(task != nullptr);
         auto &world_impl = world.impl();
         starpu_execution_stream_t *es = world_impl.execution_stream();
-        starpu_task_t *vp_task_rings[1] = { &task->parsec_task };
+        starpu_task_t *vp_task_rings[1] = { &task->starpu_task };
         __parsec_schedule_vp(es, vp_task_rings, 0);
       }
     }
@@ -2175,7 +2175,7 @@ namespace ttg_starpu {
       } else {
         /* TODO: how can we query the iovecs of the buffers here without actually packing the data? */
         metadata_size = ttg::default_data_descriptor<ttg::meta::remove_cvr_t<Value>>::payload_size(value_ptr);
-        detail::foreach_starpu_data(*value_ptr, [&](parsec_data_t* data){ iov_size += data->nb_elts; });
+        // detail::foreach_starpu_data(*value_ptr, [&](parsec_data_t* data){ iov_size += data->nb_elts; });
       }
       /* key is packed at the end */
       std::size_t key_pack_size = ttg::default_data_descriptor<Key>::payload_size(&key);
@@ -2263,10 +2263,10 @@ namespace ttg_starpu {
             //                        iovec.num_bytes, &lreg, &lreg_size);
             auto lreg_ptr = std::shared_ptr<void>{lreg, [device_copy](void *ptr) {
                                                     void *memreg = (void *)ptr;
-                                                    parsec_ce.mem_unregister(&memreg);
+                                                    //parsec_ce.mem_unregister(&memreg);
                                                     if (device_copy != nullptr) {
                                                       /* remove a reader */
-                                                      parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+                                                      //parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
                                                     }
                                                   }};
             int32_t lreg_size_i = lreg_size;
@@ -2303,20 +2303,20 @@ namespace ttg_starpu {
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
           pos = pack(*value_ptr, msg->bytes, pos, copy);
-          detail::foreach_starpu_data(value, [&](parsec_data_t *data){ ++num_iovecs; });
+          //detail::foreach_starpu_data(value, [&](parsec_data_t *data){ ++num_iovecs; });
           //std::cout << "POST pack num_iovecs " << num_iovecs << std::endl;
           /* handle any iovecs contained in it */
           write_header_fn();
-          detail::foreach_starpu_data(value, [&](parsec_data_t *data){
-            int device = 0;
-            parsec_data_copy_t* device_copy = nullptr;
-            if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
-              /* Try to find a device that is not the host and has the latest version. */
-              std::tie(device, device_copy) = detail::find_device_copy(data);
-            }
-            handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private},
-                            device_copy);
-          });
+          // detail::foreach_starpu_data(value, [&](parsec_data_t *data){
+          //   int device = 0;
+          //   parsec_data_copy_t* device_copy = nullptr;
+          //   if (world.impl().mpi_support(Space) && Space != ttg::ExecutionSpace::Host) {
+          //     /* Try to find a device that is not the host and has the latest version. */
+          //     std::tie(device, device_copy) = detail::find_device_copy(data);
+          //   }
+          //   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[device]->device_private},
+          //                   device_copy);
+          // });
         }
 
         msg->tt_id.num_iovecs = num_iovecs;
@@ -2351,7 +2351,7 @@ namespace ttg_starpu {
       /* submit all ready tasks at once */
       if (nullptr != task_ring) {
         starpu_task_t *vp_task_ring[1] = { task_ring };
-        __parsec_schedule_vp(world.impl().execution_stream(), vp_task_ring, 0);
+        //__parsec_schedule_vp(world.impl().execution_stream(), vp_task_ring, 0);
       }
 
     }
@@ -2676,10 +2676,10 @@ namespace ttg_starpu {
           gpu_task->pushout |= 1<<flowidx;
         }
       };
-      detail::foreach_parsec_data(value,
-        [&](parsec_data_t* data){
-          check_parsec_data(data);
-        });
+      // detail::foreach_parsec_data(value,
+      //   [&](parsec_data_t* data){
+      //     check_parsec_data(data);
+      //   });
     }
 
 
@@ -3082,13 +3082,13 @@ namespace ttg_starpu {
         self.nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
 
         // If we have parameters and locals, we need to define the corresponding dereference arrays
-        self.params[0] = &detail::parsec_taskclass_param0;
-        self.params[1] = &detail::parsec_taskclass_param1;
+        // self.params[0] = &detail::parsec_taskclass_param0;
+        // self.params[1] = &detail::parsec_taskclass_param1;
 
-        self.locals[0] = &detail::parsec_taskclass_param0;
-        self.locals[1] = &detail::parsec_taskclass_param1;
-        self.locals[2] = &detail::parsec_taskclass_param2;
-        self.locals[3] = &detail::parsec_taskclass_param3;
+        // self.locals[0] = &detail::parsec_taskclass_param0;
+        // self.locals[1] = &detail::parsec_taskclass_param1;
+        // self.locals[2] = &detail::parsec_taskclass_param2;
+        // self.locals[3] = &detail::parsec_taskclass_param3;
       }
       self.make_key = make_key;
       self.key_functions = &tasks_hash_fcts;
@@ -3299,13 +3299,13 @@ namespace ttg_starpu {
           tc->nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
 
           // If we have parameters and locals, we need to define the corresponding dereference arrays
-          tc->params[0] = &detail::parsec_taskclass_param0;
-          tc->params[1] = &detail::parsec_taskclass_param1;
+          // tc->params[0] = &detail::parsec_taskclass_param0;
+          // tc->params[1] = &detail::parsec_taskclass_param1;
 
-          tc->locals[0] = &detail::parsec_taskclass_param0;
-          tc->locals[1] = &detail::parsec_taskclass_param1;
-          tc->locals[2] = &detail::parsec_taskclass_param2;
-          tc->locals[3] = &detail::parsec_taskclass_param3;
+          // tc->locals[0] = &detail::parsec_taskclass_param0;
+          // tc->locals[1] = &detail::parsec_taskclass_param1;
+          // tc->locals[2] = &detail::parsec_taskclass_param2;
+          // tc->locals[3] = &detail::parsec_taskclass_param3;
         }
         tc->make_key = make_key;
         tc->key_functions = &tasks_hash_fcts;
