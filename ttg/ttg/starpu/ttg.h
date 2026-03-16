@@ -69,22 +69,6 @@
 #include <tuple>
 #include <vector>
 
-// needed for MPIX_CUDA_AWARE_SUPPORT
-#if defined(TTG_HAVE_MPI)
-#include <mpi.h>
-#if defined(TTG_HAVE_MPIEXT)
-#include <mpi-ext.h>
-#endif // TTG_HAVE_MPIEXT
-#endif // TTG_HAVE_MPI
-
-
-/*
-Add all necessary starpu include to replace parsec function
-Basic include
-MPI and CUDA include
-Trace (profiling)
-Grapher
-*/
 
 #include <cstdlib>
 #include <cstring>
@@ -209,7 +193,7 @@ namespace ttg_starpu {
       MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
       return comm_rank;
     }
-
+    //TODO
     static void ttg_starpu_ce_up(void *comm_engine, void *user_data)
     {
       // parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, user_data, detail::STARPU_TTG_MAX_AM_SIZE);
@@ -232,23 +216,6 @@ namespace ttg_starpu {
     {
       ttg::detail::register_world(*this);
       if (own_ctx) { starpu_init(nullptr); }
-
-      /* query MPI device support */
-      if (ttg::detail::force_device_comm()
-#if defined(MPIX_CUDA_AWARE_SUPPORT) && MPIX_CUDA_AWARE_SUPPORT
-          || MPIX_Query_cuda_support()
-#endif // MPIX_CUDA_AWARE_SUPPORT
-         ) {
-        mpi_space_support[static_cast<std::size_t>(ttg::ExecutionSpace::CUDA)] = true;
-      }
-
-      if (ttg::detail::force_device_comm()
-#if defined(MPIX_HIP_AWARE_SUPPORT) && MPIX_HIP_AWARE_SUPPORT
-          || MPIX_Query_hip_support()
-#endif // MPIX_HIP_AWARE_SUPPORT
-         ) {
-        mpi_space_support[static_cast<std::size_t>(ttg::ExecutionSpace::HIP)] = true;
-      }
 
       // if( NULL != parsec_ce.tag_register) {
       //   parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, detail::STARPU_TTG_MAX_AM_SIZE);
@@ -504,51 +471,6 @@ namespace ttg_starpu {
       return me->template invoke_op<ttg::ExecutionSpace::Host>();
     }
 
-    // template<typename TT>
-    // inline starpu_hook_return_t hook_hip(struct starpu_execution_stream_s *es, starpu_task_t *starpu_task) {
-    //   if constexpr(TT::derived_has_hip_op()) {
-    //     starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
-    //     return me->template invoke_op<ttg::ExecutionSpace::HIP>();
-    //   } else {
-    //     std::cerr << "HIP hook called without having a HIP op!" << std::endl;
-    //     return STARPU_HOOK_RETURN_ERROR;
-    //   }
-    // }
-
-    // template<typename TT>
-    // inline starpu_hook_return_t hook_level_zero(struct starpu_execution_stream_s *es, starpu_task_t *starpu_task) {
-    //   if constexpr(TT::derived_has_level_zero_op()) {
-    //     starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
-    //     return me->template invoke_op<ttg::ExecutionSpace::L0>();
-    //   } else {
-    //     std::cerr << "L0 hook called without having a L0 op!" << std::endl;
-    //     return STARPU_HOOK_RETURN_ERROR;
-    //   }
-    // }
-
-
-
-    // template<typename TT>
-    // inline starpu_hook_return_t evaluate_hip(const starpu_task_t *starpu_task) {
-    //   if constexpr(TT::derived_has_hip_op()) {
-    //     starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
-    //     return me->template invoke_evaluate<ttg::ExecutionSpace::HIP>();
-    //   } else {
-    //     return STARPU_HOOK_RETURN_NEXT;
-    //   }
-    // }
-
-    // template<typename TT>
-    // inline starpu_hook_return_t evaluate_level_zero(const starpu_task_t *starpu_task) {
-    //   if constexpr(TT::derived_has_level_zero_op()) {
-    //     starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
-    //     return me->template invoke_evaluate<ttg::ExecutionSpace::L0>();
-    //   } else {
-    //     return STARPU_HOOK_RETURN_NEXT;
-    //   }
-    // }
-
-
     template <typename KeyT, typename ActivationCallbackT>
     class rma_delayed_activate {
       std::vector<KeyT> _keylist;
@@ -750,14 +672,6 @@ namespace ttg_starpu {
 
     // query the first device ID
     detail::first_device_id = -1;
-    // for (int i = 0; i < starpu_nb_devices; ++i) {
-    //   bool is_gpu = parsec_mca_device_is_gpu(i);
-    //   if (detail::first_device_id == -1 && is_gpu) {
-    //     detail::first_device_id = i;
-    //   } else if (detail::first_device_id > -1 && !is_gpu) {
-    //     throw std::runtime_error("PaRSEC: Found non-GPU device in GPU ID range!");
-    //   }
-    // }
 
     /* parse the maximum inline size */
     const char* ttg_max_inline_cstr = std::getenv("TTG_MAX_INLINE");
@@ -769,22 +683,7 @@ namespace ttg_starpu {
     }
 
     bool all_peer_access = true;
-    /* check whether all GPUs can access all peer GPUs */
-    // for (int i = 0; (i < parsec_nb_devices) && all_peer_access; ++i) {
-    //   parsec_device_module_t *idevice = parsec_mca_device_get(i);
-    //   if (PARSEC_DEV_IS_GPU(idevice->type)) {
-    //     parsec_device_gpu_module_t *gpu_device = (parsec_device_gpu_module_t*)idevice;
-    //     for (int j = 0; (j < parsec_nb_devices) && all_peer_access; ++j) {
-    //       if (i != j) { // because no device can access itself, says PaRSEC
-    //         parsec_device_module_t *jdevice = parsec_mca_device_get(j);
-    //         if (PARSEC_DEV_IS_GPU(jdevice->type)) {
-    //           all_peer_access &= (gpu_device->peer_access_mask & (1<<j)) ? true : false;
-    //         }
-    //       }
-    //     }
-    //   }
-    // }
-    // detail::all_devices_peer_access = all_peer_access;
+    detail::all_devices_peer_access = all_peer_access;
   }
   inline void ttg_finalize() {
     // We need to notify the current taskpool of termination if we are in user termination detection mode
@@ -884,14 +783,6 @@ namespace ttg_starpu {
     //parsec_mempool_t mempools;
 
     // check for a non-type member named have_cuda_op
-    template <typename T>
-    using have_cuda_op_non_type_t = decltype(T::have_cuda_op);
-
-    template <typename T>
-    using have_hip_op_non_type_t = decltype(T::have_hip_op);
-
-    template <typename T>
-    using have_level_zero_op_non_type_t = decltype(T::have_level_zero_op);
 
     bool alive = true;
 
@@ -901,35 +792,6 @@ namespace ttg_starpu {
     static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
 
    public:
-    /// @return true if derivedT::have_cuda_op exists and is defined to true
-    template<typename DerivedT = derivedT>
-    static constexpr bool derived_has_cuda_op() {
-      return Space == ttg::ExecutionSpace::CUDA;
-    }
-
-    /// @return true if derivedT::have_hip_op exists and is defined to true
-    template<typename DerivedT = derivedT>
-    static constexpr bool derived_has_hip_op() {
-      return Space == ttg::ExecutionSpace::HIP;
-    }
-
-    /// @return true if derivedT::have_hip_op exists and is defined to true
-    template<typename DerivedT = derivedT>
-    static constexpr bool derived_has_level_zero_op() {
-      return Space == ttg::ExecutionSpace::L0;
-    }
-
-    /// @return true if the TT supports device execution
-    template<typename DerivedT = derivedT>
-    static constexpr bool derived_has_device_op() {
-      return (derived_has_cuda_op<DerivedT>() ||
-              derived_has_hip_op<DerivedT>() ||
-              derived_has_level_zero_op<DerivedT>());
-    }
-
-    static_assert(!derived_has_device_op() || ttg::meta::probe_all_v<ttg::detail::has_buffer_apply,
-                                                                     ttg::edges_to_output_value_types<output_terminalsT>>,
-                  "Data sent from a device-capable template task must be serializable.");
 
     using ttT = TT;
     using key_type = keyT;
@@ -1094,9 +956,6 @@ namespace ttg_starpu {
               task->copies[IS]->get_ptr()))...};
     }
 
-#ifdef TTG_HAVE_DEVICE
-    
-#endif  // TTG_HAVE_DEVICE
 
     static starpu_hook_return_t static_op(starpu_task_t *starpu_task) {
 
@@ -1141,9 +1000,6 @@ namespace ttg_starpu {
 #ifdef TTG_HAVE_COROUTINE
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
 
-#ifdef TTG_HAVE_DEVICE
-       
-#endif  // TTG_HAVE_DEVICE
       if (task->coroutine_id == ttg::TaskCoroutineID::ResumableTask) {
         auto ret = static_cast<ttg::resumable_task>(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address));
         assert(ret.ready());
@@ -2155,10 +2011,6 @@ namespace ttg_starpu {
 
     template<typename Value, typename Key>
     bool can_inline_data(Value* value_ptr, detail::ttg_data_copy_t *copy, const Key& key, std::size_t num_keys) {
-      if constexpr (derived_has_device_op()) {
-        /* don't inline if data is possibly on the device */
-        return false;
-      }
       /* non-device data */
       using decvalueT = std::decay_t<Value>;
       bool inline_data = false;
@@ -2646,9 +2498,6 @@ namespace ttg_starpu {
 
     template<typename Value>
     void copy_mark_pushout(const Value& value) {
-      //TODO : Is that only for GPU ?
-      assert(detail::starpu_ttg_caller->dev_ptr && detail::starpu_ttg_caller->dev_ptr->gpu_task);
-      parsec_gpu_task_t *gpu_task = detail::parsec_ttg_caller->dev_ptr->gpu_task;
       auto check_parsec_data = [&](parsec_data_t* data) {
         if (data->owner_device != 0) {
           /* find the flow */
@@ -2749,20 +2598,6 @@ namespace ttg_starpu {
             need_pushout = true;
           }
           caller->data_flags |= detail::ttg_starpu_data_flags::SINGLE_WRITER;
-        }
-      }
-
-      if constexpr (!derived_has_device_op()) {
-        need_pushout = true;
-      }
-
-      /* check if there are non-local successors if it's a device task */
-      if (!need_pushout) {
-        bool device_supported = world.impl().mpi_support(Space);
-        /* if MPI supports the device we don't care whether we have remote peers
-         * because we can send from the device directly */
-        if (!device_supported) {
-          need_pushout = remote_check();
         }
       }
 
@@ -3009,9 +2844,6 @@ namespace ttg_starpu {
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
       if (task->suspended_task_address) {
         assert(task->coroutine_id != ttg::TaskCoroutineID::Invalid);
-#ifdef TTG_HAVE_DEVICE
-       
-#endif // TTG_HAVE_DEVICE
         /* the coroutine should have completed and we cannot access the promise anymore */
         task->suspended_task_address = nullptr;
       }
@@ -3099,35 +2931,15 @@ namespace ttg_starpu {
       //    function_id_to_instance[self.task_class_id] = this;
       //self.incarnations = incarnations_array.data();
 //#if 0
-      else if constexpr (derived_has_hip_op()) {
-        self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_HIP;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_hip<TT>;
-        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_hip<TT>;
 
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-#if defined(PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT)
-      } else if constexpr (derived_has_level_zero_op()) {
-        self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_LEVEL_ZERO;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = &detail::evaluate_level_zero<TT>;
-        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook_level_zero<TT>;
+      self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
+      ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
+      ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+      ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook<TT>;
+      ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
+      ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
+      ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
 
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-#endif // PARSEC_HAVE_DEV_LEVEL_ZERO_SUPPORT
-      } else {
-        self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
-        ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook<TT>;
-        ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-      }
 //#endif // 0
 
       self.release_task = &parsec_release_task_to_mempool_update_nbtasks;
@@ -3311,31 +3123,16 @@ namespace ttg_starpu {
         tc->key_functions = &tasks_hash_fcts;
         tc->task_snprintf = parsec_ttg_task_snprintf;
 
-#if 0
-        // FIXME: currently only support reduction on the host
-        if constexpr (derived_has_cuda_op()) {
-          self.incarnations = (__parsec_chore_t *)malloc(3 * sizeof(__parsec_chore_t));
-          ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CUDA;
-          ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
-          ((__parsec_chore_t *)self.incarnations)[0].hook = detail::hook_cuda;
-          ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_CPU;
-          ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-          ((__parsec_chore_t *)self.incarnations)[1].hook = detail::hook;
-          ((__parsec_chore_t *)self.incarnations)[2].type = PARSEC_DEV_NONE;
-          ((__parsec_chore_t *)self.incarnations)[2].evaluate = NULL;
-          ((__parsec_chore_t *)self.incarnations)[2].hook = NULL;
-        } else
-#endif // 0
-        {
-          tc->incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-          ((__parsec_chore_t *)tc->incarnations)[0].type = PARSEC_DEV_CPU;
-          ((__parsec_chore_t *)tc->incarnations)[0].evaluate = NULL;
-          ((__parsec_chore_t *)tc->incarnations)[0].hook = &static_reducer_op<i>;
-          ((__parsec_chore_t *)tc->incarnations)[1].type = PARSEC_DEV_NONE;
-          ((__parsec_chore_t *)tc->incarnations)[1].evaluate = NULL;
-          ((__parsec_chore_t *)tc->incarnations)[1].hook = NULL;
-        }
 
+        
+        tc->incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
+        ((__parsec_chore_t *)tc->incarnations)[0].type = PARSEC_DEV_CPU;
+        ((__parsec_chore_t *)tc->incarnations)[0].evaluate = NULL;
+        ((__parsec_chore_t *)tc->incarnations)[0].hook = &static_reducer_op<i>;
+        ((__parsec_chore_t *)tc->incarnations)[1].type = PARSEC_DEV_NONE;
+        ((__parsec_chore_t *)tc->incarnations)[1].evaluate = NULL;
+        ((__parsec_chore_t *)tc->incarnations)[1].hook = NULL;
+        
         /* the reduction task does not alter the termination detection because the target task will execute */
         tc->release_task = &parsec_release_task_to_mempool;
         tc->complete_execution = NULL;
@@ -3517,25 +3314,6 @@ namespace ttg_starpu {
     /// @arg pm a function that provides a hint on which device the task should execute.
     template<typename Devicemap>
     void set_devicemap(Devicemap&& dm) {
-      //static_assert(derived_has_device_op(), "Device map only allowed on device-enabled TT!");
-      if constexpr (std::is_same_v<ttg::device::Device, decltype(dm(std::declval<keyT>()))>) {
-        // dm returns a Device
-        devicemap = std::forward<Devicemap>(dm);
-      } else {
-        // convert dm return into a Device
-        devicemap = [=](const keyT& key) {
-          if constexpr (derived_has_cuda_op()) {
-            return ttg::device::Device(dm(key), ttg::ExecutionSpace::CUDA);
-          } else if constexpr (derived_has_hip_op()) {
-            return ttg::device::Device(dm(key), ttg::ExecutionSpace::HIP);
-          } else if constexpr (derived_has_level_zero_op()) {
-            return ttg::device::Device(dm(key), ttg::ExecutionSpace::L0);
-          } else {
-            throw std::runtime_error("Unknown device type!");
-            return ttg::device::Device{};
-          }
-        };
-      }
     }
 
     /// device map accessor
