@@ -10,7 +10,7 @@ namespace detail {
   struct starpu_ttg_task_base_t;
   struct ttg_data_copy_t;
 
-  inline thread_local starpu_ttg_task_base_t *parsec_ttg_caller = nullptr;
+  inline thread_local starpu_ttg_task_base_t *starpu_ttg_caller = nullptr;
 
   inline ttg_data_copy_t*& ttg_data_copy_container() {
     static thread_local ttg_data_copy_t *ptr = nullptr;

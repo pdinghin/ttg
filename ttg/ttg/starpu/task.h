@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: BSD-3-Clause
-#ifndef TTG_PARSEC_TASK_H
-#define TTG_PARSEC_TASK_H
+#ifndef TTG_STARPU_TASK_H
+#define TTG_STARPU_TASK_H
 
-#include "ttg/parsec/ttg_data_copy.h"
+#include "ttg/starpu/ttg_data_copy.h"
 
 #include <parsec/parsec_internal.h>
 #include <parsec/mca/device/device_gpu.h>
 
-namespace ttg_parsec {
+namespace ttg_starpu {
 
   namespace detail {
 

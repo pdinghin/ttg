@@ -49,7 +49,8 @@
 #include "ttg/starpu/devicefunc.h"
 #include "ttg/starpu/ttvalue.h"
 #include "ttg/device/task.h"
-#include "ttg/starpu/parsec_data.h"
+#include "ttg/starpu/starpu_data.h"
+#include "ttg/starpu/hash.h"
 
 #include <algorithm>
 #include <array>
@@ -68,7 +69,6 @@
 #include <string>
 #include <tuple>
 #include <vector>
-
 
 #include <cstdlib>
 #include <cstring>
@@ -193,14 +193,14 @@ namespace ttg_starpu {
       MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
       return comm_rank;
     }
-    //TODO
+
     static void ttg_starpu_ce_up(void *comm_engine, void *user_data)
     {
       // parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, user_data, detail::STARPU_TTG_MAX_AM_SIZE);
       // parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, user_data, 128);
     }
 
-    static void ttg_starpu_ce_down(starpu_comm_engine_t *comm_engine, void *user_data)
+    static void ttg_starpu_ce_down(void *comm_engine, void *user_data)
     {
       // parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
       // parsec_ce.tag_unregister(WorldImpl::parsec_ttg_rma_tag());
@@ -757,10 +757,9 @@ namespace ttg_starpu {
     //TODO: Change to StarpuTTGBase with stapu hash table
     struct StarPUTTBase {
      protected:
-      //  static std::map<int, ParsecBaseTT*> function_id_to_instance; Déjà commenté
-      // parsec_hash_table_t tasks_table;
-      // parsec_hash_table_t task_constraint_table;
       // parsec_task_class_t self;
+      starpu_hash_table_t tasks_table;
+      starpu_hash_table_t task_contraint_table;
     };
 
   }  // namespace detail
@@ -1690,9 +1689,9 @@ namespace ttg_starpu {
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
 
-      parsec_key_t hk = 0;
+      starpu_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
-        hk = reinterpret_cast<parsec_key_t>(&key);
+        hk = reinterpret_cast<starpu_key_t>(&key);
         assert(keymap(key) == world.rank());
       }
 
@@ -1707,7 +1706,7 @@ namespace ttg_starpu {
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
         has_lock = true;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        starpu_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
           world_impl.increment_created();
@@ -1887,7 +1886,7 @@ namespace ttg_starpu {
       if (release) {
         // no constraint blocked us
         task_t *task;
-        parsec_key_t hk = 0;
+        starpu_key_t hk = 0;
         task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
         assert(task != nullptr);
         auto &world_impl = world.impl();
@@ -1913,8 +1912,8 @@ namespace ttg_starpu {
 
         if (release) {
           // no constraint blocked this task, so go ahead and release
-          auto hk = reinterpret_cast<parsec_key_t>(&key);
-          task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+          auto hk = reinterpret_cast<starpu_key_t>(&key);
+          task = (task_t*)starpu_hash_table_remove(&task_constraint_table, hk);
           assert(task != nullptr);
           if (task_ring == nullptr) {
             /* the first task is set directly */
@@ -1922,7 +1921,7 @@ namespace ttg_starpu {
           } else {
             /* push into the ring */
             parsec_list_item_ring_push_sorted(&task_ring->super, &task->starpu_task.super,
-                                              offsetof(parsec_task_t, priority));
+                                              offsetof(starpu_task_t, priority));
           }
         }
       }
@@ -1954,7 +1953,7 @@ namespace ttg_starpu {
 
       if (count == numins) {
         starpu_execution_stream_t *es = world_impl.execution_stream();
-        parsec_key_t hk = task->pkey();
+        starpu_key_t hk = task->pkey();
         if (tracing()) {
           if constexpr (!keyT_is_Void) {
             ttg::trace(world.rank(), ":", get_name(), " : ", task->key, ": submitting task for op ");
@@ -1962,7 +1961,7 @@ namespace ttg_starpu {
             ttg::trace(world.rank(), ":", get_name(), ": submitting task for op ");
           }
         }
-        if (task->remove_from_hash) parsec_hash_table_remove(&tasks_table, hk);
+        if (task->remove_from_hash) starpu_hash_table_remove(&tasks_table, hk);
 
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
@@ -2315,9 +2314,9 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
 
-        auto hk = reinterpret_cast<parsec_key_t>(&key);
+        auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        starpu_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
           world.impl().increment_created();
@@ -2325,7 +2324,7 @@ namespace ttg_starpu {
           if( world.impl().dag_profiling() ) {
           }
         }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2369,9 +2368,9 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
 
-        parsec_key_t hk = 0;
+        starpu_key_t hk = 0;
         task_t *task;
-        parsec_hash_table_lock_bucket(&tasks_table, hk);
+        starpu_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(ttg::Void{});
           world.impl().increment_created();
@@ -2380,7 +2379,7 @@ namespace ttg_starpu {
 
           }
         }
-        parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2425,7 +2424,7 @@ namespace ttg_starpu {
 
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task = nullptr;
-        //parsec_hash_table_lock_bucket(&tasks_table, hk);
+        starpu_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
           ttg::print_error(world.rank(), ":", get_name(), ":", key,
                            " : error finalize called on stream that never received an input data: ", i);
@@ -2471,7 +2470,7 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
 
-        auto hk = static_cast<parsec_key_t>(0);
+        auto hk = static_cast<starpu_key_t>(0);
         task_t *task = nullptr;
         if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
           ttg::print_error(world.rank(), ":", get_name(),
@@ -2505,7 +2504,7 @@ namespace ttg_starpu {
           while (flowidx < MAX_PARAM_COUNT &&
                 gpu_task->flow[flowidx] != nullptr &&
                 gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
-            if (detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in->original == data) {
+            if (detail::starpu_ttg_caller->starpu_task.data[flowidx].data_in->original == data) {
               /* found the right data, set the corresponding flow as pushout */
               break;
             }
@@ -2516,8 +2515,8 @@ namespace ttg_starpu {
           }
           if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
             /* no flow found, add one and mark it pushout */
-            detail::parsec_ttg_caller->parsec_task.data[flowidx].data_in = data->device_copies[0];
-            detail::parsec_ttg_caller->parsec_task.data[flowidx].data_out = data->device_copies[data->owner_device];
+            detail::starpu_ttg_caller->starpu_task.data[flowidx].data_in = data->device_copies[0];
+            detail::starpu_ttg_caller->starpu_task.data[flowidx].data_out = data->device_copies[data->owner_device];
             gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
           }
           /* need to mark the flow WRITE, otherwise PaRSEC will not do the pushout */
@@ -2768,7 +2767,7 @@ namespace ttg_starpu {
 
     void fence() override { ttg::default_execution_context().impl().fence(); }
 
-    static int key_equal(parsec_key_t a, parsec_key_t b, void *user_data) {
+    static int key_equal(starpu_key_t a, starpu_key_t b, void *user_data) {
       if constexpr (std::is_same_v<keyT, void>) {
         return 1;
       } else {
@@ -2778,7 +2777,7 @@ namespace ttg_starpu {
       }
     }
 
-    static uint64_t key_hash(parsec_key_t k, void *user_data) {
+    static uint64_t key_hash(starpu_key_t k, void *user_data) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       if constexpr (keyT_is_Void || std::is_same_v<keyT, void>) {
         return 0;
@@ -2790,7 +2789,7 @@ namespace ttg_starpu {
       }
     }
 
-    static char *key_print(char *buffer, size_t buffer_size, parsec_key_t k, void *user_data) {
+    static char *key_print(char *buffer, size_t buffer_size, starpu_key_t k, void *user_data) {
       if constexpr (std::is_same_v<keyT, void>) {
         buffer[0] = '\0';
         return buffer;
@@ -2804,10 +2803,10 @@ namespace ttg_starpu {
       }
     }
 
-    static parsec_key_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
+    static starpu_key_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
         // we use the parsec_assignment_t array as a scratchpad to store the hash and address of the key
         keyT *key = *(keyT**)&(as[2]);
-        return reinterpret_cast<parsec_key_t>(key);
+        return reinterpret_cast<starpu_key_t>(key);
     }
 
     static char *starpu_ttg_task_snprintf(char *buffer, size_t buffer_size, const starpu_task_t *starpu_task) {
@@ -3079,7 +3078,7 @@ namespace ttg_starpu {
       world.impl().deregister_op(this);
     }
 
-    static constexpr const ttg::Runtime runtime = ttg::Runtime::PaRSEC;
+    static constexpr const ttg::Runtime runtime = ttg::Runtime::StarPU;
 
     /// define the reducer function to be called when additional inputs are
     /// received on a streaming terminal
@@ -3413,7 +3412,7 @@ namespace ttg_starpu {
 
 #include "ttg/make_tt.h"
 
-}  // namespace ttg_parsec
+}  // namespace ttg_starpu
 
 /**
  * The PaRSEC backend tracks data copies so we make a copy of the data
@@ -3421,7 +3420,7 @@ namespace ttg_starpu {
  * the user may mutate the data after it was passed to send/broadcast.
  */
 template <>
-struct ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC> {
+struct ttg::detail::value_copy_handler<ttg::Runtime::StarPU> {
  private:
   ttg_starpu::detail::ttg_data_copy_t *copy_to_remove = nullptr;
   bool do_release = true;
