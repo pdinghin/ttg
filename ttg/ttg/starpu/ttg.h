@@ -445,7 +445,7 @@ namespace ttg_starpu {
     inline void transfer_ownership_impl(T&& arg, int device) {
       if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
         // detail::foreach_starpu_data(arg, [&](parsec_data_t *data){
-        //   // parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
+        //   parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
         //   /* make sure we increment the version since we will modify the data */
         //   data->device_copies[0]->version++;
         // });

@@ -5,9 +5,9 @@
 #include "ttg/parsec/buffer.h"
 #include "ttg/buffer.h"
 
-namespace ttg_parsec::detail {
+namespace ttg_starpu::detail {
   template<typename Value, typename Fn>
-  void foreach_parsec_data(Value&& value, Fn&& fn) {
+  void foreach_starpu_data(Value&& value, Fn&& fn) {
     /* protect for non-serializable types, allowed if the TT has no device op */
     if constexpr (ttg::detail::has_buffer_apply_v<Value>) {
       ttg::detail::buffer_apply(value, [&]<typename B>(B&& b){
