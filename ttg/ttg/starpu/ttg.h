@@ -75,6 +75,8 @@
 
 #include "ttg/device/device.h"
 
+#include "starpu.h"
+
 namespace ttg_starpu {
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::TTBase *> static_set_arg_fct_call_t;

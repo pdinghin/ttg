@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
-#ifndef TTG_PARSEC_FWD_H
-#define TTG_PARSEC_FWD_H
+#ifndef TTG_STARPU_FWD_H
+#define TTG_STARPU_FWD_H
 
 #include "ttg/fwd.h"
 #include "ttg/util/typelist.h"
@@ -8,11 +8,10 @@
 
 #include <future>
 
-#include <parsec.h>
+#include <starpu.h>
 
-extern "C" struct parsec_context_s;
 
-namespace ttg_parsec {
+namespace ttg_starpu {
 
   template <typename keyT, typename output_terminalsT, typename derivedT,
             typename input_valueTs = ttg::typelist<>,
@@ -30,7 +29,7 @@ namespace ttg_parsec {
 
   inline void make_executable_hook(ttg::World&);
 
-  inline void ttg_initialize(int argc, char **argv, int num_threads = -1, parsec_context_s * = nullptr);
+  inline void ttg_initialize(int argc, char **argv, int num_threads = -1, void * = nullptr);
 
   inline void ttg_finalize();
 
@@ -94,8 +93,8 @@ namespace ttg_parsec {
   inline int num_devices();
 
   template<typename T>
-  parsec_data_t* buffer_data(T&& buffer);
+  auto* buffer_data(T&& buffer);
 
-}  // namespace ttg_parsec
+}  // namespace ttg_starpu
 
-#endif  // TTG_PARSEC_FWD_H
+#endif  // TTG_STARPU_FWD_H
