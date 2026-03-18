@@ -317,7 +317,6 @@ namespace ttg_starpu {
   // }
 
   namespace detail {
-    //TODO: vérify we can use or create starpu_symbol_t
     // const starpu_symbol_t starpu_taskclass_param0 = {
     //   .flags = STARPU_SYMBOL_IS_STANDALONE|STARPU_SYMBOL_IS_GLOBAL,
     //   .name = "HASH0",
@@ -463,7 +462,7 @@ namespace ttg_starpu {
     }
 
     template<typename TT>
-    inline starpu_hook_return_t hook(struct starpu_execution_stream_s *es, starpu_task_t *starpu_task) {
+    inline starpu_hook_return_t hook(struct void *es, starpu_task_t *starpu_task) {
       starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
         transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
@@ -648,7 +647,6 @@ namespace ttg_starpu {
 
   }  // namespace detail
 
-  //TODO: Maybe delete ttg_initialize because seem initialize with MPI and/or CUDA
   inline void ttg_initialize(int argc, char **argv, int num_threads, void *ctx) {
     if (detail::initialized_mpi()) throw std::runtime_error("ttg_starpu::ttg_initialize: can only be called once");
 
@@ -1021,7 +1019,7 @@ namespace ttg_starpu {
           assert(ttg::coroutine_handle<ttg::resumable_task_state>::from_address(suspended_task_address).promise().ready());
         }
         task->tt->set_outputs_tls_ptr(old_output_tls_ptr);
-        // detail::parsec_ttg_caller = nullptr;
+        detail::starpu_ttg_caller = nullptr;
         task->suspended_task_address = suspended_task_address;
       }
       else
@@ -1097,7 +1095,7 @@ namespace ttg_starpu {
     }
 
     template <std::size_t i>
-    static starpu_hook_return_t static_reducer_op(starpu_execution_stream_s *es, starpu_task_t *starpu_task) {
+    static starpu_hook_return_t static_reducer_op(void *es, starpu_task_t *starpu_task) {
       using rtask_t = detail::reducer_task_t;
       using value_t = std::tuple_element_t<i, actual_input_tuple_type>;
       constexpr const bool val_is_void = ttg::meta::is_void_v<value_t>;
@@ -1153,7 +1151,7 @@ namespace ttg_starpu {
           //   // maybe someone is changing the goal right now
           //   break;
           // }
-          source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
+          // source_copy = ((detail::ttg_data_copy_self_t *)(item))->self;
           assert(target_copy->num_readers() == target_copy->mutable_tag);
           assert(source_copy->num_readers() > 0);
           reducer(*reinterpret_cast<std::decay_t<value_t> *>(target_copy->get_ptr()),
@@ -1267,25 +1265,25 @@ namespace ttg_starpu {
     }
 
     /** Returns the task memory pool owned by the calling thread */
-    inline parsec_thread_mempool_t *get_task_mempool(void) {
-      auto &world_impl = world.impl();
-      starpu_execution_stream_s *es = world_impl.execution_stream();
-      int index = (es->virtual_process->vp_id * es->virtual_process->nb_cores + es->th_id);
-      return &mempools.thread_mempools[index];
-    }
+    // inline parsec_thread_mempool_t *get_task_mempool(void) {
+    //   auto &world_impl = world.impl();
+    //   starpu_execution_stream_s *es = world_impl.execution_stream();
+    //   int index = (es->virtual_process->vp_id * es->virtual_process->nb_cores + es->th_id);
+    //   return &mempools.thread_mempools[index];
+    // }
 
     template <size_t i, typename valueT>
     void set_arg_from_msg_keylist(ttg::span<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
       /* create a dummy task that holds the copy, which can be reused by others */
       task_t *dummy;
-      starpu_execution_stream_s *es = world.impl().execution_stream();
-      parsec_thread_mempool_t *mempool = get_task_mempool();
-      dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self, this);
-      dummy->set_dummy(true);
-      // TODO: do we need to copy static_stream_goal in dummy?
+      // starpu_execution_stream_s *es = world.impl().execution_stream();
+      // parsec_thread_mempool_t *mempool = get_task_mempool();
+      // dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self, this);
+      // dummy->set_dummy(true);
+      // // TODO: do we need to copy static_stream_goal in dummy?
 
-      /* set the received value as the dummy's only data */
-      dummy->copies[0] = copy;
+      // /* set the received value as the dummy's only data */
+      // dummy->copies[0] = copy;
 
 
       /* save the current task and set the dummy task */
@@ -1313,15 +1311,15 @@ namespace ttg_starpu {
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
         starpu_task_t *vp_task_ring[1] = { task_ring };
-        __parsec_schedule_vp(world_impl.execution_stream(), vp_task_ring, 0);
+        //__parsec_schedule_vp(world_impl.execution_stream(), vp_task_ring, 0);
       }
 
       /* restore the previous task */
       detail::starpu_ttg_caller = starpu_ttg_caller_save;
 
       /* release the dummy task */
-      complete_task_and_release(es, &dummy->starpu_task);
-      parsec_thread_mempool_free(mempool, &dummy->starpu_task);
+      //complete_task_and_release(es, &dummy->starpu_task);
+      //parsec_thread_mempool_free(mempool, &dummy->starpu_task);
     }
 
     // there are 6 types of set_arg:
@@ -1393,12 +1391,12 @@ namespace ttg_starpu {
             bool inline_data = msg->tt_id.inline_data;
 
             int nv = 0;
-            starpu_ce_tag_t cbtag;
+            //starpu_ce_tag_t cbtag;
             /* start the RMA transfers */
             auto create_activation_fn = [&]() {
               /* extract the callback tag */
-              std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
-              pos += sizeof(cbtag);
+              // std::memcpy(&cbtag, msg->bytes + pos, sizeof(cbtag));
+              // pos += sizeof(cbtag);
 
               copy->add_ref(); // so we can safely decrement the readers in the activation
               /* create the value from the metadata */
@@ -1629,17 +1627,17 @@ namespace ttg_starpu {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
       task_t *newtask;
-      parsec_thread_mempool_t *mempool = get_task_mempool();
-      char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
+      // parsec_thread_mempool_t *mempool = get_task_mempool();
+      // char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       int32_t priority = 0;
       if constexpr (!keyT_is_Void) {
         priority = priomap(key);
         /* placement-new the task */
-        newtask = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
+        //newtask = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
       } else {
         priority = priomap();
         /* placement-new the task */
-        newtask = new (taskobj) task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
+        //newtask = new (taskobj) task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
       }
 
       for (int i = 0; i < static_stream_goal.size(); ++i) {
@@ -1658,8 +1656,8 @@ namespace ttg_starpu {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
       detail::reducer_task_t *newtask;
-      parsec_thread_mempool_t *mempool = get_task_mempool();
-      char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
+      //parsec_thread_mempool_t *mempool = get_task_mempool();
+      //char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       // use the priority of the task we stream into
       int32_t priority = 0;
       if constexpr (!keyT_is_Void) {
@@ -1670,8 +1668,8 @@ namespace ttg_starpu {
         ttg::trace(world.rank(), ":", get_name(), ": creating reducer task");
       }
       /* placement-new the task */
-      newtask = new (taskobj) detail::reducer_task_t(task, mempool, inpute_reducers_taskclass[i],
-                                                     world_impl.taskpool(), priority, is_first);
+      // newtask = new (taskobj) detail::reducer_task_t(task, mempool, inpute_reducers_taskclass[i],
+      //                                                world_impl.taskpool(), priority, is_first);
 
       return newtask;
     }
@@ -1707,21 +1705,21 @@ namespace ttg_starpu {
       if (numins > 1 || reducer) {
         has_lock = true;
         starpu_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-          task = create_new_task(key);
-          world_impl.increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-          get_pull_data = !is_lazy_pull();
-          if( world_impl.dag_profiling() ) {
-          }
-        } else if (!reducer && numins == (task->in_data_count + 1)) {
-          /* remove while we have the lock */
-          parsec_hash_table_nolock_remove(&tasks_table, hk);
-          remove_from_hash = false;
-        }
-        /* if we have a reducer, we need to hold on to the lock for just a little longer */
+        // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        //   task = create_new_task(key);
+        //   world_impl.increment_created();
+        //   parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
+        //   get_pull_data = !is_lazy_pull();
+        //   if( world_impl.dag_profiling() ) {
+        //   }
+        // } else if (!reducer && numins == (task->in_data_count + 1)) {
+        //   /* remove while we have the lock */
+        //   parsec_hash_table_nolock_remove(&tasks_table, hk);
+        //   remove_from_hash = false;
+        // }
+        // /* if we have a reducer, we need to hold on to the lock for just a little longer */
         if (!reducer) {
-          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          starpu_hash_table_unlock_bucket(&tasks_table, hk);
           has_lock = false;
         }
       } else {
@@ -1797,10 +1795,10 @@ namespace ttg_starpu {
             }
 
             /* now we can unlock the bucket */
-            parsec_hash_table_unlock_bucket(&tasks_table, hk);
+            starpu_hash_table_unlock_bucket(&tasks_table, hk);
           } else {
             /* unlock the bucket, the lock is not needed anymore */
-            parsec_hash_table_unlock_bucket(&tasks_table, hk);
+            starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
             /* get the copy to use as input for this task */
             detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
@@ -1811,7 +1809,7 @@ namespace ttg_starpu {
           }
         } else {
           /* unlock the bucket, the lock is not needed anymore */
-          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          starpu_hash_table_unlock_bucket(&tasks_table, hk);
           /* submit reducer for void values to handle side effects */
           submit_reducer_task(task);
         }
@@ -1823,7 +1821,7 @@ namespace ttg_starpu {
       } else {
         /* unlock the bucket, the lock is not needed anymore */
         if (has_lock) {
-          parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          starpu_hash_table_unlock_bucket(&tasks_table, hk);
         }
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
@@ -1867,7 +1865,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        parsec_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
+        starpu_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
       }
       return !constrained;
     }
@@ -1887,12 +1885,12 @@ namespace ttg_starpu {
         // no constraint blocked us
         task_t *task;
         starpu_key_t hk = 0;
-        task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+        //task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
         assert(task != nullptr);
         auto &world_impl = world.impl();
-        starpu_execution_stream_t *es = world_impl.execution_stream();
+        //starpu_execution_stream_t *es = world_impl.execution_stream();
         starpu_task_t *vp_task_rings[1] = { &task->starpu_task };
-        __parsec_schedule_vp(es, vp_task_rings, 0);
+        //__parsec_schedule_vp(es, vp_task_rings, 0);
       }
     }
 
@@ -1913,23 +1911,23 @@ namespace ttg_starpu {
         if (release) {
           // no constraint blocked this task, so go ahead and release
           auto hk = reinterpret_cast<starpu_key_t>(&key);
-          task = (task_t*)starpu_hash_table_remove(&task_constraint_table, hk);
+          //task = (task_t*)starpu_hash_table_remove(&task_constraint_table, hk);
           assert(task != nullptr);
           if (task_ring == nullptr) {
             /* the first task is set directly */
             task_ring = &task->starpu_task;
           } else {
             /* push into the ring */
-            parsec_list_item_ring_push_sorted(&task_ring->super, &task->starpu_task.super,
+            //parsec_list_item_ring_push_sorted(&task_ring->super, &task->starpu_task.super,
                                               offsetof(starpu_task_t, priority));
           }
         }
       }
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
-        starpu_execution_stream_t *es = world_impl.execution_stream();
+        //starpu_execution_stream_t *es = world_impl.execution_stream();
         starpu_task_t *vp_task_rings[1] = { task_ring };
-        __parsec_schedule_vp(es, vp_task_rings, 0);
+        //__parsec_schedule_vp(es, vp_task_rings, 0);
       }
     }
 
@@ -1944,15 +1942,15 @@ namespace ttg_starpu {
       if (is_ready) {
         count = numins;
       } else {
-        count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
-        assert(count <= self.dependencies_goal);
+        // count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
+        // assert(count <= self.dependencies_goal);
       }
 
       auto &world_impl = world.impl();
       ttT *baseobj = task->tt;
 
       if (count == numins) {
-        starpu_execution_stream_t *es = world_impl.execution_stream();
+        //starpu_execution_stream_t *es = world_impl.execution_stream();
         starpu_key_t hk = task->pkey();
         if (tracing()) {
           if constexpr (!keyT_is_Void) {
@@ -1966,14 +1964,14 @@ namespace ttg_starpu {
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
             starpu_task_t *vp_task_rings[1] = { &task->starpu_task };
-            __parsec_schedule_vp(es, vp_task_rings, 0);
+            //__parsec_schedule_vp(es, vp_task_rings, 0);
           } else if (*task_ring == nullptr) {
             /* the first task is set directly */
             *task_ring = &task->starpu_task;
           } else {
             /* push into the ring */
-            parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->starpu_task.super,
-                                              offsetof(starpu_task_t, priority));
+            // parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->starpu_task.super,
+            //                                   offsetof(starpu_task_t, priority));
           }
         }
       } else if constexpr (!ttg::meta::is_void_v<keyT>) {
@@ -2089,55 +2087,55 @@ namespace ttg_starpu {
             /* TODO: at the moment, the tag argument to parsec_ce.get() is treated as a
             * raw function pointer instead of a preregistered AM tag, so play that game.
             * Once this is fixed in PaRSEC we need to use parsec_ttg_rma_tag instead! */
-            starpu_ce_tag_t cbtag = reinterpret_cast<starpu_ce_tag_t>(&detail::get_remote_complete_cb);
-            std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
-            pos += sizeof(cbtag);
+            // starpu_ce_tag_t cbtag = reinterpret_cast<starpu_ce_tag_t>(&detail::get_remote_complete_cb);
+            // std::memcpy(msg->bytes + pos, &cbtag, sizeof(cbtag));
+            // pos += sizeof(cbtag);
           }
         };
-        auto handle_iovec_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr) {
+        //auto handle_iovec_fn = [&](auto&& iovec, parsec_data_copy_t *device_copy = nullptr) {
 
-          if (inline_data) {
-            /* inline data is packed right after the tt_id in the message */
-            std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
-            pos += iovec.num_bytes;
-          } else {
+        //   if (inline_data) {
+        //     /* inline data is packed right after the tt_id in the message */
+        //     std::memcpy(msg->bytes + pos, iovec.data, iovec.num_bytes);
+        //     pos += iovec.num_bytes;
+        //   } else {
 
-            /**
-             * register the generic iovecs and pack the registration handles
-             * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
-             */
-            copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
-            void * lreg;
-            size_t lreg_size;
-            /* TODO: only register once when we can broadcast the data! */
-            // parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
-            //                        iovec.num_bytes, &lreg, &lreg_size);
-            auto lreg_ptr = std::shared_ptr<void>{lreg, [device_copy](void *ptr) {
-                                                    void *memreg = (void *)ptr;
-                                                    //parsec_ce.mem_unregister(&memreg);
-                                                    if (device_copy != nullptr) {
-                                                      /* remove a reader */
-                                                      //parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
-                                                    }
-                                                  }};
-            int32_t lreg_size_i = lreg_size;
-            std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
-            pos += sizeof(lreg_size_i);
-            std::memcpy(msg->bytes + pos, lreg, lreg_size);
-            pos += lreg_size;
-            //std::cout << "set_arg_impl lreg " << lreg << std::endl;
-            /* TODO: can we avoid the extra indirection of going through std::function? */
-            std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
-              /* shared_ptr of value and registration captured by value so resetting
-              * them here will eventually release the memory/registration */
-              lreg_ptr.reset();
-              detail::release_data_copy(copy);
-            });
-            std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
-            std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
-            pos += sizeof(fn_ptr);
-          }
-        };
+        //     /**
+        //      * register the generic iovecs and pack the registration handles
+        //      * memory layout: [<lreg_size, lreg, release_cb_ptr>, ...]
+        //      */
+        //     copy = detail::register_data_copy<decvalueT>(copy, nullptr, true);
+        //     void * lreg;
+        //     size_t lreg_size;
+        //     /* TODO: only register once when we can broadcast the data! */
+        //     // parsec_ce.mem_register(iovec.data, PARSEC_MEM_TYPE_NONCONTIGUOUS, iovec.num_bytes, parsec_datatype_int8_t,
+        //     //                        iovec.num_bytes, &lreg, &lreg_size);
+        //     auto lreg_ptr = std::shared_ptr<void>{lreg, [device_copy](void *ptr) {
+        //                                             void *memreg = (void *)ptr;
+        //                                             //parsec_ce.mem_unregister(&memreg);
+        //                                             if (device_copy != nullptr) {
+        //                                               /* remove a reader */
+        //                                               //parsec_atomic_fetch_sub_int32(&device_copy->readers, 1);
+        //                                             }
+        //                                           }};
+        //     int32_t lreg_size_i = lreg_size;
+        //     std::memcpy(msg->bytes + pos, &lreg_size_i, sizeof(lreg_size_i));
+        //     pos += sizeof(lreg_size_i);
+        //     std::memcpy(msg->bytes + pos, lreg, lreg_size);
+        //     pos += lreg_size;
+        //     //std::cout << "set_arg_impl lreg " << lreg << std::endl;
+        //     /* TODO: can we avoid the extra indirection of going through std::function? */
+        //     std::function<void(void)> *fn = new std::function<void(void)>([=]() mutable {
+        //       /* shared_ptr of value and registration captured by value so resetting
+        //       * them here will eventually release the memory/registration */
+        //       lreg_ptr.reset();
+        //       detail::release_data_copy(copy);
+        //     });
+        //     std::intptr_t fn_ptr{reinterpret_cast<std::intptr_t>(fn)};
+        //     std::memcpy(msg->bytes + pos, &fn_ptr, sizeof(fn_ptr));
+        //     pos += sizeof(fn_ptr);
+        //   }
+        // };
 
         if constexpr (ttg::has_split_metadata<std::decay_t<Value>>::value) {
           ttg::SplitMetadataDescriptor<decvalueT> descr;
@@ -2149,7 +2147,7 @@ namespace ttg_starpu {
           //std::cout << "set_arg_impl splitmd num_iovecs " << num_iovecs << std::endl;
           write_header_fn();
           for (auto&& iov : iovs) {
-            handle_iovec_fn(iov);
+            //handle_iovec_fn(iov);
           }
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
@@ -2317,13 +2315,13 @@ namespace ttg_starpu {
         auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task;
         starpu_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-          task = create_new_task(key);
-          world.impl().increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-          if( world.impl().dag_profiling() ) {
-          }
-        }
+        // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        //   task = create_new_task(key);
+        //   world.impl().increment_created();
+        //   parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
+        //   if( world.impl().dag_profiling() ) {
+        //   }
+        // }
         starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
@@ -2371,14 +2369,14 @@ namespace ttg_starpu {
         starpu_key_t hk = 0;
         task_t *task;
         starpu_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-          task = create_new_task(ttg::Void{});
-          world.impl().increment_created();
-          parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-          if( world.impl().dag_profiling() ) {
+        // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
+        //   task = create_new_task(ttg::Void{});
+        //   world.impl().increment_created();
+        //   parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
+        //   if( world.impl().dag_profiling() ) {
 
-          }
-        }
+        //   }
+        // }
         starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
@@ -2425,11 +2423,11 @@ namespace ttg_starpu {
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task = nullptr;
         starpu_hash_table_lock_bucket(&tasks_table, hk);
-        if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
-          ttg::print_error(world.rank(), ":", get_name(), ":", key,
-                           " : error finalize called on stream that never received an input data: ", i);
-          throw std::runtime_error("TT::finalize called on stream that never received an input data");
-        }
+        // if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
+        //   ttg::print_error(world.rank(), ":", get_name(), ":", key,
+        //                    " : error finalize called on stream that never received an input data: ", i);
+        //   throw std::runtime_error("TT::finalize called on stream that never received an input data");
+        // }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2497,33 +2495,33 @@ namespace ttg_starpu {
 
     template<typename Value>
     void copy_mark_pushout(const Value& value) {
-      auto check_parsec_data = [&](parsec_data_t* data) {
-        if (data->owner_device != 0) {
-          /* find the flow */
-          int flowidx = 0;
-          while (flowidx < MAX_PARAM_COUNT &&
-                gpu_task->flow[flowidx] != nullptr &&
-                gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
-            if (detail::starpu_ttg_caller->starpu_task.data[flowidx].data_in->original == data) {
-              /* found the right data, set the corresponding flow as pushout */
-              break;
-            }
-            ++flowidx;
-          }
-          if (flowidx == MAX_PARAM_COUNT) {
-            throw std::runtime_error("Cannot add more than MAX_PARAM_COUNT flows to a task!");
-          }
-          if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
-            /* no flow found, add one and mark it pushout */
-            detail::starpu_ttg_caller->starpu_task.data[flowidx].data_in = data->device_copies[0];
-            detail::starpu_ttg_caller->starpu_task.data[flowidx].data_out = data->device_copies[data->owner_device];
-            gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
-          }
-          /* need to mark the flow WRITE, otherwise PaRSEC will not do the pushout */
-          ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
-          gpu_task->pushout |= 1<<flowidx;
-        }
-      };
+      // auto check_parsec_data = [&](parsec_data_t* data) {
+      //   if (data->owner_device != 0) {
+      //     /* find the flow */
+      //     int flowidx = 0;
+      //     while (flowidx < MAX_PARAM_COUNT &&
+      //           gpu_task->flow[flowidx] != nullptr &&
+      //           gpu_task->flow[flowidx]->flow_flags != PARSEC_FLOW_ACCESS_NONE) {
+      //       if (detail::starpu_ttg_caller->starpu_task.data[flowidx].data_in->original == data) {
+      //         /* found the right data, set the corresponding flow as pushout */
+      //         break;
+      //       }
+      //       ++flowidx;
+      //     }
+      //     if (flowidx == MAX_PARAM_COUNT) {
+      //       throw std::runtime_error("Cannot add more than MAX_PARAM_COUNT flows to a task!");
+      //     }
+      //     if (gpu_task->flow[flowidx]->flow_flags == PARSEC_FLOW_ACCESS_NONE) {
+      //       /* no flow found, add one and mark it pushout */
+      //       detail::starpu_ttg_caller->starpu_task.data[flowidx].data_in = data->device_copies[0];
+      //       detail::starpu_ttg_caller->starpu_task.data[flowidx].data_out = data->device_copies[data->owner_device];
+      //       gpu_task->flow_nb_elts[flowidx] = data->nb_elts;
+      //     }
+      //     /* need to mark the flow WRITE, otherwise PaRSEC will not do the pushout */
+      //     ((parsec_flow_t *)gpu_task->flow[flowidx])->flow_flags |= PARSEC_FLOW_ACCESS_WRITE;
+      //     gpu_task->pushout |= 1<<flowidx;
+      //   }
+      // };
       // detail::foreach_parsec_data(value,
       //   [&](parsec_data_t* data){
       //     check_parsec_data(data);
@@ -2803,11 +2801,11 @@ namespace ttg_starpu {
       }
     }
 
-    static starpu_key_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
-        // we use the parsec_assignment_t array as a scratchpad to store the hash and address of the key
-        keyT *key = *(keyT**)&(as[2]);
-        return reinterpret_cast<starpu_key_t>(key);
-    }
+    // static starpu_key_t make_key(const parsec_taskpool_t *tp, const parsec_assignment_t *as) {
+    //     // we use the parsec_assignment_t array as a scratchpad to store the hash and address of the key
+    //     keyT *key = *(keyT**)&(as[2]);
+    //     return reinterpret_cast<starpu_key_t>(key);
+    // }
 
     static char *starpu_ttg_task_snprintf(char *buffer, size_t buffer_size, const starpu_task_t *starpu_task) {
       if(buffer_size == 0)
@@ -2831,9 +2829,9 @@ namespace ttg_starpu {
 
 
 
-    parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
+    //parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
 
-    static starpu_hook_return_t complete_task_and_release(starpu_execution_stream_t *es, starpu_task_t *starpu_task) {
+    static starpu_hook_return_t complete_task_and_release(void *es, starpu_task_t *starpu_task) {
 
       //std::cout << "complete_task_and_release: task " << parsec_task << std::endl;
 
@@ -2896,21 +2894,21 @@ namespace ttg_starpu {
       register_input_callbacks(std::make_index_sequence<numinedges>{});
       int i;
 
-      memset(&self, 0, sizeof(parsec_task_class_t));
+      //memset(&self, 0, sizeof(parsec_task_class_t));
 
-      self.name = strdup(get_name().c_str());
-      self.task_class_id = get_instance_id();
-      self.nb_parameters = 0;
-      self.nb_locals = 0;
+      // self.name = strdup(get_name().c_str());
+      // self.task_class_id = get_instance_id();
+      // self.nb_parameters = 0;
+      // self.nb_locals = 0;
       //self.nb_flows = numflows;
-      self.nb_flows = MAX_PARAM_COUNT; // we're not using all flows but have to
+      //self.nb_flows = MAX_PARAM_COUNT; // we're not using all flows but have to
                                        // trick the device handler into looking at all of them
 
       if( world_impl.profiling() ) {
         // first two ints are used to store the hash of the key.
-        self.nb_parameters = (sizeof(void*)+sizeof(int)-1)/sizeof(int);
+        //self.nb_parameters = (sizeof(void*)+sizeof(int)-1)/sizeof(int);
         // seconds two ints are used to store a pointer to the key of the task.
-        self.nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
+        //self.nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
 
         // If we have parameters and locals, we need to define the corresponding dereference arrays
         // self.params[0] = &detail::parsec_taskclass_param0;
@@ -2921,59 +2919,59 @@ namespace ttg_starpu {
         // self.locals[2] = &detail::parsec_taskclass_param2;
         // self.locals[3] = &detail::parsec_taskclass_param3;
       }
-      self.make_key = make_key;
-      self.key_functions = &tasks_hash_fcts;
-      self.task_snprintf = parsec_ttg_task_snprintf;
+      // self.make_key = make_key;
+      // self.key_functions = &tasks_hash_fcts;
+      // self.task_snprintf = parsec_ttg_task_snprintf;
 
 
-      world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
+      //world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
       //    function_id_to_instance[self.task_class_id] = this;
       //self.incarnations = incarnations_array.data();
 //#if 0
 
-      self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-      ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
-      ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
-      ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook<TT>;
-      ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-      ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-      ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
+      // self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
+      // ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
+      // ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
+      // ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook<TT>;
+      // ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
+      // ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
+      // ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
 
 //#endif // 0
 
-      self.release_task = &parsec_release_task_to_mempool_update_nbtasks;
-      self.complete_execution = complete_task_and_release;
+      // self.release_task = &parsec_release_task_to_mempool_update_nbtasks;
+      // self.complete_execution = complete_task_and_release;
 
       for (i = 0; i < MAX_PARAM_COUNT; i++) {
-        parsec_flow_t *flow = new parsec_flow_t;
-        flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
-        flow->sym_type = PARSEC_SYM_INOUT;
+        // parsec_flow_t *flow = new parsec_flow_t;
+        // flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
+        // flow->sym_type = PARSEC_SYM_INOUT;
         // see initialize_flows below
         // flow->flow_flags = PARSEC_FLOW_ACCESS_RW;
-        flow->dep_in[0] = NULL;
-        flow->dep_out[0] = NULL;
-        flow->flow_index = i;
-        flow->flow_datatype_mask = ~0;
-        *((parsec_flow_t **)&(self.in[i])) = flow;
+        // flow->dep_in[0] = NULL;
+        // flow->dep_out[0] = NULL;
+        // flow->flow_index = i;
+        // flow->flow_datatype_mask = ~0;
+        // *((parsec_flow_t **)&(self.in[i])) = flow;
       }
       //*((parsec_flow_t **)&(self.in[i])) = NULL;
       //initialize_flows<input_terminals_type>(self.in);
 
       for (i = 0; i < MAX_PARAM_COUNT; i++) {
-        parsec_flow_t *flow = new parsec_flow_t;
-        flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
-        flow->sym_type = PARSEC_SYM_INOUT;
-        flow->flow_flags = PARSEC_FLOW_ACCESS_READ;  // does PaRSEC use this???
-        flow->dep_in[0] = NULL;
-        flow->dep_out[0] = NULL;
-        flow->flow_index = i;
-        flow->flow_datatype_mask = (1 << i);
-        *((parsec_flow_t **)&(self.out[i])) = flow;
+        // parsec_flow_t *flow = new parsec_flow_t;
+        // flow->name = strdup((std::string("flow out") + std::to_string(i)).c_str());
+        // flow->sym_type = PARSEC_SYM_INOUT;
+        // flow->flow_flags = PARSEC_FLOW_ACCESS_READ;  // does PaRSEC use this???
+        // flow->dep_in[0] = NULL;
+        // flow->dep_out[0] = NULL;
+        // flow->flow_index = i;
+        // flow->flow_datatype_mask = (1 << i);
+        // *((parsec_flow_t **)&(self.out[i])) = flow;
       }
       //*((parsec_flow_t **)&(self.out[i])) = NULL;
 
-      self.flags = 0;
-      self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
+      // self.flags = 0;
+      // self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
       int nbthreads = 0;
       auto *context = world_impl.context();
@@ -2981,14 +2979,14 @@ namespace ttg_starpu {
         nbthreads += context->virtual_processes[i]->nb_cores;
       }
 
-      parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t), sizeof(task_t),
-                               offsetof(parsec_task_t, mempool_owner), nbthreads);
+      // parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t), sizeof(task_t),
+      //                          offsetof(parsec_task_t, mempool_owner), nbthreads);
 
-      parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
-                             NULL);
+      // parsec_hash_table_init(&tasks_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
+      //                        NULL);
 
-      parsec_hash_table_init(&task_constraint_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
-                             NULL);
+      // parsec_hash_table_init(&task_constraint_table, offsetof(detail::parsec_ttg_task_base_t, tt_ht_item), 8, tasks_hash_fcts,
+      //                        NULL);
     }
 
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
@@ -3021,16 +3019,16 @@ namespace ttg_starpu {
 
     // Destructor checks for unexecuted tasks
     virtual ~TT() {
-      if(nullptr != self.name ) {
-        free((void*)self.name);
-        self.name = nullptr;
-      }
+      // if(nullptr != self.name ) {
+      //   free((void*)self.name);
+      //   self.name = nullptr;
+      // }
 
       for (std::size_t i = 0; i < numins; ++i) {
-        if (inpute_reducers_taskclass[i] != nullptr) {
-          std::free(inpute_reducers_taskclass[i]);
-          inpute_reducers_taskclass[i] = nullptr;
-        }
+        // if (inpute_reducers_taskclass[i] != nullptr) {
+        //   std::free(inpute_reducers_taskclass[i]);
+        //   inpute_reducers_taskclass[i] = nullptr;
+        // }
       }
       release();
     }
@@ -3046,7 +3044,7 @@ namespace ttg_starpu {
     }
 
     virtual void print_incomplete_tasks() const override {
-      parsec_hash_table_for_all((parsec_hash_table_t*)&tasks_table, ht_iter_cb, (void*)this);
+      //parsec_hash_table_for_all((parsec_hash_table_t*)&tasks_table, ht_iter_cb, (void*)this);
     }
 
     virtual void release() override { do_release(); }
@@ -3058,22 +3056,22 @@ namespace ttg_starpu {
       alive = false;
       /* print all outstanding tasks */
       print_incomplete_tasks();
-      parsec_hash_table_fini(&tasks_table);
-      parsec_mempool_destruct(&mempools);
+      // parsec_hash_table_fini(&tasks_table);
+      // parsec_mempool_destruct(&mempools);
       // uintptr_t addr = (uintptr_t)self.incarnations;
       // free((void *)addr);
-      free((__parsec_chore_t *)self.incarnations);
+      // free((__parsec_chore_t *)self.incarnations);
       for (int i = 0; i < MAX_PARAM_COUNT; i++) {
-        if (NULL != self.in[i]) {
-          free(self.in[i]->name);
-          delete self.in[i];
-          self.in[i] = nullptr;
-        }
-        if (NULL != self.out[i]) {
-          free(self.out[i]->name);
-          delete self.out[i];
-          self.out[i] = nullptr;
-        }
+        // if (NULL != self.in[i]) {
+        //   free(self.in[i]->name);
+        //   delete self.in[i];
+        //   self.in[i] = nullptr;
+        // }
+        // if (NULL != self.out[i]) {
+        //   free(self.out[i]->name);
+        //   delete self.out[i];
+        //   self.out[i] = nullptr;
+        // }
       }
       world.impl().deregister_op(this);
     }
@@ -3090,52 +3088,52 @@ namespace ttg_starpu {
       ttg::trace(world.rank(), ":", get_name(), " : setting reducer for terminal ", i);
       std::get<i>(input_reducers) = reducer;
 
-      parsec_task_class_t *tc = inpute_reducers_taskclass[i];
-      if (nullptr == tc) {
-        tc = (parsec_task_class_t *)std::calloc(1, sizeof(*tc));
-        inpute_reducers_taskclass[i] = tc;
+      // parsec_task_class_t *tc = inpute_reducers_taskclass[i];
+      // if (nullptr == tc) {
+      //   tc = (parsec_task_class_t *)std::calloc(1, sizeof(*tc));
+      //   inpute_reducers_taskclass[i] = tc;
 
-        tc->name = strdup((get_name() + std::string(" reducer ") + std::to_string(i)).c_str());
-        tc->task_class_id = get_instance_id();
-        tc->nb_parameters = 0;
-        tc->nb_locals = 0;
-        tc->nb_flows = numflows;
+      //   tc->name = strdup((get_name() + std::string(" reducer ") + std::to_string(i)).c_str());
+      //   tc->task_class_id = get_instance_id();
+      //   tc->nb_parameters = 0;
+      //   tc->nb_locals = 0;
+      //   tc->nb_flows = numflows;
 
-        auto &world_impl = world.impl();
+      //   auto &world_impl = world.impl();
 
-        if( world_impl.profiling() ) {
-          // first two ints are used to store the hash of the key.
-          tc->nb_parameters = (sizeof(void*)+sizeof(int)-1)/sizeof(int);
-          // seconds two ints are used to store a pointer to the key of the task.
-          tc->nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
+      //   if( world_impl.profiling() ) {
+      //     // first two ints are used to store the hash of the key.
+      //     tc->nb_parameters = (sizeof(void*)+sizeof(int)-1)/sizeof(int);
+      //     // seconds two ints are used to store a pointer to the key of the task.
+      //     tc->nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
 
-          // If we have parameters and locals, we need to define the corresponding dereference arrays
-          // tc->params[0] = &detail::parsec_taskclass_param0;
-          // tc->params[1] = &detail::parsec_taskclass_param1;
+      //     // If we have parameters and locals, we need to define the corresponding dereference arrays
+      //     // tc->params[0] = &detail::parsec_taskclass_param0;
+      //     // tc->params[1] = &detail::parsec_taskclass_param1;
 
-          // tc->locals[0] = &detail::parsec_taskclass_param0;
-          // tc->locals[1] = &detail::parsec_taskclass_param1;
-          // tc->locals[2] = &detail::parsec_taskclass_param2;
-          // tc->locals[3] = &detail::parsec_taskclass_param3;
-        }
-        tc->make_key = make_key;
-        tc->key_functions = &tasks_hash_fcts;
-        tc->task_snprintf = parsec_ttg_task_snprintf;
+      //     // tc->locals[0] = &detail::parsec_taskclass_param0;
+      //     // tc->locals[1] = &detail::parsec_taskclass_param1;
+      //     // tc->locals[2] = &detail::parsec_taskclass_param2;
+      //     // tc->locals[3] = &detail::parsec_taskclass_param3;
+      //   }
+      //   tc->make_key = make_key;
+      //   tc->key_functions = &tasks_hash_fcts;
+      //   tc->task_snprintf = parsec_ttg_task_snprintf;
 
 
         
-        tc->incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-        ((__parsec_chore_t *)tc->incarnations)[0].type = PARSEC_DEV_CPU;
-        ((__parsec_chore_t *)tc->incarnations)[0].evaluate = NULL;
-        ((__parsec_chore_t *)tc->incarnations)[0].hook = &static_reducer_op<i>;
-        ((__parsec_chore_t *)tc->incarnations)[1].type = PARSEC_DEV_NONE;
-        ((__parsec_chore_t *)tc->incarnations)[1].evaluate = NULL;
-        ((__parsec_chore_t *)tc->incarnations)[1].hook = NULL;
+      //   tc->incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
+      //   ((__parsec_chore_t *)tc->incarnations)[0].type = PARSEC_DEV_CPU;
+      //   ((__parsec_chore_t *)tc->incarnations)[0].evaluate = NULL;
+      //   ((__parsec_chore_t *)tc->incarnations)[0].hook = &static_reducer_op<i>;
+      //   ((__parsec_chore_t *)tc->incarnations)[1].type = PARSEC_DEV_NONE;
+      //   ((__parsec_chore_t *)tc->incarnations)[1].evaluate = NULL;
+      //   ((__parsec_chore_t *)tc->incarnations)[1].hook = NULL;
         
-        /* the reduction task does not alter the termination detection because the target task will execute */
-        tc->release_task = &parsec_release_task_to_mempool;
-        tc->complete_execution = NULL;
-      }
+      //   /* the reduction task does not alter the termination detection because the target task will execute */
+      //   tc->release_task = &parsec_release_task_to_mempool;
+      //   tc->complete_execution = NULL;
+      // }
     }
 
     /// define the reducer function to be called when additional inputs are
@@ -3398,9 +3396,9 @@ namespace ttg_starpu {
           if(ttg::tracing())
             ttg::print("ttg_starpu(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
                        std::get<1>(it).get(), ", ", std::get<2>(it), ")");
-          int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
-                                             std::get<0>(it), NULL);
-          assert(rc == 0);
+          // int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
+          //                                    std::get<0>(it), NULL);
+          // assert(rc == 0);
         }
 
         tmp.clear();

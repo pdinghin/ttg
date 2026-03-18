@@ -13,7 +13,7 @@
 #define TTG_IMPL_NS ttg_starpu
 #define TTG_IMPL_DEVICE_SUPPORT 1
 
-namespace ttg_parsec {}
+namespace ttg_starpu {}
 
 namespace ttg {
 

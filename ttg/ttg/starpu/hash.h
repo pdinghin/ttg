@@ -14,6 +14,15 @@ namespace ttg::starpu {
 
     typedef std::unordered_map<starpu_key_t,starpu_hash_table_item_t> starpu_hash_table_t;
 
+    void starpu_hash_table_unlock_bucket(starpu_hash_table_t hash_table, starpu_key_t key);
+
+    void starpu_hash_table_lock_bucket(starpu_hash_table_t hash_table, starpu_key_t key);
+
+    void starpu_hash_table_insert(starpu_hash_table_t hash_table, starpu_hash_table_item_t item);
+
+    void *starpu_hash_table_remove(starpu_hash_table_t hash_table, starpu_key_t key);
+
+
 }
 
 
