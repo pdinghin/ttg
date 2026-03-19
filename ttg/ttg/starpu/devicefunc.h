@@ -275,11 +275,12 @@ namespace ttg_parsec {
     detail::post_device_out(b, std::index_sequence_for<Buffer...>{});
   }
 
+  //starpu_data
   template<typename T>
-  parsec_data_t* buffer_data(T&& buffer) {
+  auto* buffer_data(T&& buffer) {
     using view_type = std::remove_reference_t<T>;
     static_assert(ttg::meta::is_buffer_v<view_type> || ttg::meta::is_devicescratch_v<view_type>);
-    return detail::get_parsec_data(buffer);
+    return detail::get_starpu_data(buffer);
   }
 
 } // namespace ttg_parsec

@@ -93,7 +93,7 @@ namespace ttg_starpu {
   inline int num_devices();
 
   template<typename T>
-  auto* buffer_data(T&& buffer);
+  auto* buffer_data(T&& buffer); //starpu_data
 
 }  // namespace ttg_starpu
 

@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: BSD-3-Clause
-#ifndef TTG_PARSEC_DEVICESCRATCH_H
-#define TTG_PARSEC_DEVICESCRATCH_H
+#ifndef TTG_STARPU_DEVICESCRATCH_H
+#define TTG_STARPU_DEVICESCRATCH_H
 
 // TODO: replace with short vector
-#define TTG_PARSEC_MAX_NUM_DEVICES 4
+#define TTG_STARPU_MAX_NUM_DEVICES 4
 
 #include <array>
 #include <parsec.h>
@@ -13,12 +13,12 @@
 #include <ttg/devicescope.h>
 #include "ttg/parsec/task.h"
 
-namespace ttg_parsec {
+namespace ttg_starpu {
 
 namespace detail {
   // fwd decl
   template<typename T>
-  parsec_data_t* get_parsec_data(const ttg_parsec::devicescratch<T>&);
+  parsec_data_t* get_starpu_data(const ttg_parsec::devicescratch<T>&);
 } // namespace detail
 
 /**
@@ -118,11 +118,11 @@ public:
 
 namespace detail {
   template<typename T>
-  parsec_data_t* get_parsec_data(const ttg_parsec::devicescratch<T>& scratch) {
+  parsec_data_t* get_starpu_data(const ttg_starpu::devicescratch<T>& scratch) {
     return const_cast<parsec_data_t*>(scratch.m_data);
   }
 } // namespace detail
 
-} // namespace ttg_parsec
+} // namespace ttg_starpu
 
-#endif // TTG_PARSEC_DEVICESCRATCH_H
+#endif // TTG_STARPU_DEVICESCRATCH_H
