@@ -1,49 +1,47 @@
 // SPDX-License-Identifier: BSD-3-Clause
-#ifndef TTG_PARSEC_PARSEC_DATA_H
-#define TTG_PARSEC_PARSEC_DATA_H
+#ifndef TTG_STARPU_DATA_H
+#define TTG_STARPU_DATA_H
 
-#include "ttg/parsec/buffer.h"
 #include "ttg/buffer.h"
+#include <starpu.h>
 
 namespace ttg_starpu::detail {
+  
+  /* Iterate over all buffers in a value and apply a function to each.
+   * Stub implementation for StarPU.
+   * 
+   * TODO: This function may need active implementation if device data tracking
+   * becomes necessary for StarPU. Currently, all calls are commented out in
+   * the main TTG code. */
   template<typename Value, typename Fn>
   void foreach_starpu_data(Value&& value, Fn&& fn) {
-    /* protect for non-serializable types, allowed if the TT has no device op */
+    /* For StarPU, this function is currently a no-op.
+     * Device data tracking is handled differently in StarPU
+     * compared to PaRSEC. This function exists for API compatibility. */
+    
     if constexpr (ttg::detail::has_buffer_apply_v<Value>) {
       ttg::detail::buffer_apply(value, [&]<typename B>(B&& b){
-        parsec_data_t *data = detail::get_parsec_data(b);
-        if (nullptr != data) {
-          fn(data);
-        }
+        // TODO: Implement StarPU-specific data tracking if needed
+        // For now, do nothing - StarPU handles data differently
       });
     }
   }
 
-  /**
-   * Find the latest data copy on a device. Falls back to the host copy if
-   * it's the latest or if there are no device copies.
-   * Will add a reader to the copy that has to be removed later.
+  /* Find the latest data copy on a device for StarPU.
+   * 
+   * TODO: This is a stub for PaRSEC compatibility.
+   * StarPU uses a different data model (handles instead of explicit copies).
+   * If device-specific data location tracking becomes necessary,
+   * this should be reimplemented using StarPU's data handles.
+   * 
+   * Currently returns {0, nullptr} (host device, no explicit copy).
    */
-  inline std::tuple<int, parsec_data_copy_t*> find_device_copy(parsec_data_t* data) {
-    parsec_atomic_lock(&data->lock);
-    int version = data->device_copies[0]->version; // default to host
-    int device = 0;
-    parsec_data_copy_t* device_copy = nullptr;
-    for (int i = 1; i < parsec_nb_devices; ++i) {
-      if (data->device_copies[i] == nullptr) continue;
-      if (data->device_copies[i]->version >= version) {
-        device = i;
-        version = data->device_copies[i]->version;
-        device_copy = data->device_copies[i];
-      }
-    }
-    if (device != 0) {
-        /* add a reader to the device copy */
-        parsec_atomic_fetch_add_int32(&device_copy->readers, 1);
-    }
-    parsec_atomic_unlock(&data->lock);
-    return {device, device_copy};
+  inline std::tuple<int, void*> find_device_copy(void* data_handle) {
+    // TODO: Implement StarPU data copy location tracking when needed
+    // For now, always return host device (index 0)
+    return {0, nullptr};
   }
-} // namespace ttg_parsec::detail
 
-#endif // TTG_PARSEC_PARSEC_DATA_H
+} // namespace ttg_starpu::detail
+
+#endif // TTG_STARPU_DATA_H

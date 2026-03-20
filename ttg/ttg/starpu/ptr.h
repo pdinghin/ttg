@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: BSD-3-Clause
-#ifndef TTG_PARSEC_PTR_H
-#define TTG_PARSEC_PTR_H
+#ifndef TTG_STARPU_PTR_H
+#define TTG_STARPU_PTR_H
 
 #include <unordered_map>
 #include <mutex>
 
-#include "ttg/parsec/ttg_data_copy.h"
-#include "ttg/parsec/thread_local.h"
-#include "ttg/parsec/task.h"
+#include "ttg/starpu/ttg_data_copy.h"
+#include "ttg/starpu/thread_local.h"
+#include "ttg/starpu/task.h"
 
-namespace ttg_parsec {
+namespace ttg_starpu {
 
   // fwd decl
   template<typename T>
@@ -124,7 +124,7 @@ namespace ttg_parsec {
 
 
     template<typename T>
-    ttg_parsec::detail::ttg_data_copy_t* get_copy(ttg_parsec::Ptr<T>& p);
+    ttg_starpu::detail::ttg_data_copy_t* get_copy(ttg_starpu::Ptr<T>& p);
   } // namespace detail
 
   // fwd decl
@@ -145,14 +145,14 @@ namespace ttg_parsec {
 
     std::unique_ptr<detail::ptr_impl> m_ptr;
 
-    /* only PaRSEC backend functions are allowed to touch our private parts */
+    /* only StarPU backend functions are allowed to touch our private parts */
     template<typename... Args>
     friend Ptr<T> make_ptr(Args&&... args);
     template<typename S>
     friend Ptr<std::decay_t<S>> get_ptr(S&& obj);
     template<typename S>
     friend detail::ttg_data_copy_t* detail::get_copy(Ptr<S>& p);
-    friend ttg::detail::value_copy_handler<ttg::Runtime::PaRSEC>;
+    friend ttg::detail::value_copy_handler<ttg::Runtime::StarPU>;
 
     /* only accessible by get_ptr and make_ptr */
     Ptr(detail::ptr_impl::copy_type *copy)
@@ -204,8 +204,8 @@ namespace ttg_parsec {
     template<typename Arg>
     inline auto get_ptr(Arg&& obj) {
 
-      for (int i = 0; i < detail::parsec_ttg_caller->data_count; ++i) {
-        detail::ttg_data_copy_t *copy = detail::parsec_ttg_caller->copies[i];
+      for (int i = 0; i < detail::starpu_ttg_caller->data_count; ++i) {
+        detail::ttg_data_copy_t *copy = detail::starpu_ttg_caller->copies[i];
         if (nullptr != copy) {
           if (copy->get_ptr() == &obj) {
             bool is_ready = true;
@@ -213,8 +213,8 @@ namespace ttg_parsec {
 #if 0
             /* check all tracked device data for validity */
             for (auto it : copy) {
-              parsec_data_t *data = *it;
-              for (int i = 0; i < parsec_nb_devices; ++i) {
+              starpu_data_handle_t *data = *it;
+              for (int i = 0; i < starpu_nb_devices; ++i) {
                 if (nullptr != data->device_copies[i]) {
 
                 } else {
@@ -223,7 +223,7 @@ namespace ttg_parsec {
               }
             }
 #endif // 0
-            return std::make_pair(is_ready, std::tuple{ttg_parsec::ptr<std::decay_t<Arg>>(copy)});
+            return std::make_pair(is_ready, std::tuple{ttg_starpu::ptr<std::decay_t<Arg>>(copy)});
           }
         }
       }
@@ -234,7 +234,7 @@ namespace ttg_parsec {
 
   template<typename... Args>
   inline std::pair<bool, std::tuple<ptr<std::decay_t<Args>>...>> get_ptr(Args&&... args) {
-    if (nullptr == detail::parsec_ttg_caller) {
+    if (nullptr == detail::starpu_ttg_caller) {
       throw std::runtime_error("ttg::get_ptr called outside of a task!");
     }
 
@@ -252,9 +252,9 @@ namespace ttg_parsec {
   template<typename T>
   inline Ptr<std::decay_t<T>> get_ptr(T&& obj) {
     using ptr_type = Ptr<std::decay_t<T>>;
-    if (nullptr != detail::parsec_ttg_caller) {
-      for (int i = 0; i < detail::parsec_ttg_caller->data_count; ++i) {
-        detail::ttg_data_copy_t *copy = detail::parsec_ttg_caller->copies[i];
+    if (nullptr != detail::starpu_ttg_caller) {
+      for (int i = 0; i < detail::starpu_ttg_caller->data_count; ++i) {
+        detail::ttg_data_copy_t *copy = detail::starpu_ttg_caller->copies[i];
         if (nullptr != copy) {
           if (copy->get_ptr() == &obj) {
             return ptr_type(copy);
@@ -275,11 +275,11 @@ namespace ttg_parsec {
 
   namespace detail {
     template<typename T>
-    inline detail::ttg_data_copy_t* get_copy(ttg_parsec::Ptr<T>& p) {
+    inline detail::ttg_data_copy_t* get_copy(ttg_starpu::Ptr<T>& p) {
       return p.get_copy();
     }
   } // namespace detail
 
-} // namespace ttg_parsec
+} // namespace ttg_starpu
 
-#endif // TTG_PARSEC_PTR_H
+#endif // TTG_STARPU_PTR_H

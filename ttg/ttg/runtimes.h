@@ -43,7 +43,7 @@ namespace ttg {
     using hash_t = uint64_t;
     constexpr static ExecutionSpace execution_spaces[] = {ExecutionSpace::Host};
     constexpr static std::size_t num_execution_spaces = sizeof(execution_spaces) / sizeof(ExecutionSpace);
-  }
+  };
 
 }  // namespace ttg
 

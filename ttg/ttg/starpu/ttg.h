@@ -42,15 +42,17 @@
 #include "ttg/serialization/data_descriptor.h"
 
 #include "ttg/starpu/fwd.h"
-
+#include "ttg/starpu/task.h"
 #include "ttg/starpu/buffer.h"
 #include "ttg/starpu/devicescratch.h"
 #include "ttg/starpu/thread_local.h"
 #include "ttg/starpu/devicefunc.h"
 #include "ttg/starpu/ttvalue.h"
+#include "ttg/starpu/starpu_hash_table.h"
 #include "ttg/device/task.h"
 #include "ttg/starpu/starpu_data.h"
-#include "ttg/starpu/hash.h"
+#include "ttg/starpu/ptr.h"
+
 
 #include <algorithm>
 #include <array>
@@ -165,7 +167,7 @@ namespace ttg_starpu {
       return 1;
     }
 
-    static int get_remote_complete_cb(void *ce, void tag, void *msg, size_t msg_size,
+    static int get_remote_complete_cb(void *ce, int tag, void *msg, size_t msg_size,
                                       int src, void *cb_data);
 
     inline bool &initialized_mpi() {
@@ -175,6 +177,20 @@ namespace ttg_starpu {
 
     inline bool all_devices_peer_access;
 
+    inline void send_active_message(int owner, const void *data, size_t size) {
+      // TODO: replace by real StarPU remote communication 
+      (void)owner;
+      (void)data;
+      (void)size;
+      ttg::trace("ttg_starpu: send_active_message stub (owner=", owner, ")");
+    }
+
+    inline void enumerate_starpu_data_copy( auto&& value, auto&& callback ) {
+      // TODO: traverse over StarPU data copies when device tracking is implemented
+      (void)value;
+      (void)callback;
+    }
+
   }  // namespace detail
 
   class WorldImpl : public ttg::base::WorldImplBase {
@@ -183,29 +199,33 @@ namespace ttg_starpu {
     bool _task_profiling;
     std::array<bool, static_cast<std::size_t>(ttg::ExecutionSpace::Invalid)>
                mpi_space_support = {true, false, false};
+    void *ctx = nullptr;
+    bool own_ctx = false;
 
     int query_comm_size() {
       int comm_size;
-      MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+      //MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+      comm_size = 1;
       return comm_size;
     }
 
     int query_comm_rank() {
       int comm_rank;
-      MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+      //MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+      comm_rank = 0; 
       return comm_rank;
     }
 
     static void ttg_starpu_ce_up(void *comm_engine, void *user_data)
     {
-      // parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, user_data, detail::STARPU_TTG_MAX_AM_SIZE);
-      // parsec_ce.tag_register(WorldImpl::parsec_ttg_rma_tag(), &detail::get_remote_complete_cb, user_data, 128);
+      // register message handlers 
+
     }
 
     static void ttg_starpu_ce_down(void *comm_engine, void *user_data)
     {
-      // parsec_ce.tag_unregister(WorldImpl::parsec_ttg_tag());
-      // parsec_ce.tag_unregister(WorldImpl::parsec_ttg_rma_tag());
+      // unregister message handlers 
+
     }
 
    public:
@@ -217,7 +237,12 @@ namespace ttg_starpu {
        , _task_profiling(false)
     {
       ttg::detail::register_world(*this);
-      if (own_ctx) { starpu_init(nullptr); }
+      if (own_ctx) {
+         int ret = starpu_init(nullptr);
+          if (ret != 0) {
+            throw std::runtime_error("Failed to initialize StarPU");
+          } 
+        }
 
       // if( NULL != parsec_ce.tag_register) {
       //   parsec_ce.tag_register(WorldImpl::parsec_ttg_tag(), &detail::static_unpack_msg, this, detail::STARPU_TTG_MAX_AM_SIZE);
@@ -249,7 +274,7 @@ namespace ttg_starpu {
     // static constexpr int parsec_ttg_tag() { return PARSEC_DSL_TTG_TAG; }
     // static constexpr int parsec_ttg_rma_tag() { return PARSEC_DSL_TTG_RMA_TAG; }
 
-    MPI_Comm comm() const { return MPI_COMM_WORLD; }
+    // MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
     virtual void execute() override {
       
@@ -303,7 +328,7 @@ namespace ttg_starpu {
     virtual void fence_impl(void) override {
       int rank = this->rank();
 
-      MPI_Barrier(comm());
+      // MPI_Barrier(comm());
 
       execute();
     }
@@ -445,11 +470,11 @@ namespace ttg_starpu {
     template<typename T>
     inline void transfer_ownership_impl(T&& arg, int device) {
       if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
-        // detail::foreach_starpu_data(arg, [&](parsec_data_t *data){
-        //   parsec_data_transfer_ownership_to_copy(data, device, PARSEC_FLOW_ACCESS_RW);
-        //   /* make sure we increment the version since we will modify the data */
-        //   data->device_copies[0]->version++;
-        // });
+        detail::enumerate_starpu_data_copy(arg, [&](auto *data){
+          // TODO: impl StarPU copy ownership transfer here.
+          (void)data;
+          (void)device;
+        });
       }
     }
 
@@ -464,7 +489,7 @@ namespace ttg_starpu {
     }
 
     template<typename TT>
-    inline starpu_hook_return_t hook(struct void *es, starpu_task_t *starpu_task) {
+    inline starpu_hook_return_t hook(void *es, starpu_task_t *starpu_task) {
       starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
         transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
@@ -598,13 +623,13 @@ namespace ttg_starpu {
            * of the task
            */
           assert(nullptr == copy_in->get_next_task());
-          copy_in->set_next_task(&task->starpu_task);
+          copy_in->set_next_task(task->starpu_task);
           std::atomic_thread_fence(std::memory_order_release);
           copy_in->mark_mutable();
         } else {
           if (defer_writer && nullptr == copy_in->get_next_task()) {
             /* we're the first writer and want to wait for all readers to complete */
-            copy_res->set_next_task(&task->starpu_task);
+            copy_res->set_next_task(task->starpu_task);
             task->defer_writer = true;
           } else {
             /* there are writers and/or waiting already of this copy already, make a copy that we can mutate */
@@ -654,10 +679,12 @@ namespace ttg_starpu {
 
     // make sure it's not already initialized
     int mpi_initialized;
-    MPI_Initialized(&mpi_initialized);
+    //MPI_Initialized(&mpi_initialized);
+    mpi_initialized = 0;
     if (!mpi_initialized) {  // MPI not initialized? do it, remember that we did it
       int provided;
-      MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+      //MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
+      // provided = MPI_THREAD_MULTIPLE;
       if (!provided)
         throw std::runtime_error("ttg_starpu::ttg_initialize: MPI_Init_thread did not provide MPI_THREAD_MULTIPLE");
       detail::initialized_mpi() = true;
@@ -693,7 +720,9 @@ namespace ttg_starpu {
     ttg::detail::set_default_world(ttg::World{});  // reset the default world
     detail::ptr_impl::drop_all_ptr();
     ttg::detail::destroy_worlds<ttg_starpu::WorldImpl>();
-    if (detail::initialized_mpi()) MPI_Finalize();
+    if (detail::initialized_mpi()) {
+      //MPI_Finalize();
+    }
   }
   inline ttg::World ttg_default_execution_context() { return ttg::get_default_world(); }
   [[noreturn]]
@@ -724,12 +753,12 @@ namespace ttg_starpu {
 
   inline void ttg_sum(ttg::World world, double &value) {
     double result = 0.0;
-    MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
+    //MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
     value = result;
   }
 
   inline void make_executable_hook(ttg::World& world) {
-    MPI_Barrier(world.impl().comm());
+    //MPI_Barrier(world.impl().comm());
   }
 
   /// broadcast
@@ -740,13 +769,13 @@ namespace ttg_starpu {
     if (world.rank() == source_rank) {
       BUFLEN = ttg::default_data_descriptor<T>::payload_size(&data);
     }
-    MPI_Bcast(&BUFLEN, 1, MPI_INT64_T, source_rank, world.impl().comm());
+    //MPI_Bcast(&BUFLEN, 1, MPI_INT64_T, source_rank, world.impl().comm());
 
     unsigned char *buf = new unsigned char[BUFLEN];
     if (world.rank() == source_rank) {
       ttg::default_data_descriptor<T>::pack_payload(&data, BUFLEN, 0, buf);
     }
-    MPI_Bcast(buf, BUFLEN, MPI_UNSIGNED_CHAR, source_rank, world.impl().comm());
+    //MPI_Bcast(buf, BUFLEN, MPI_UNSIGNED_CHAR, source_rank, world.impl().comm());
     if (world.rank() != source_rank) {
       ttg::default_data_descriptor<T>::unpack_payload(&data, BUFLEN, 0, buf);
     }
@@ -754,12 +783,23 @@ namespace ttg_starpu {
   }
 
   namespace detail {
-    //TODO: Change to StarpuTTGBase with stapu hash table
     struct StarPUTTBase {
      protected:
-      // parsec_task_class_t self;
+      starpu_codelet_t * self_task_class = nullptr;
       starpu_hash_table_t tasks_table;
-      starpu_hash_table_t task_contraint_table;
+      starpu_hash_table_t task_constraint_table;
+
+      StarPUTTBase() {
+        // TODO: Initialize starpu_codelet_t
+        self_task_class = nullptr;
+      }
+
+      ~StarPUTTBase() {
+        if (nullptr != self_task_class) {
+          // starpu_task_class_destroy(self_task_class);
+          self_task_class = nullptr;
+        }
+      }
     };
 
   }  // namespace detail
@@ -791,6 +831,11 @@ namespace ttg_starpu {
     static constexpr int numflows = std::max(numins, numouts);                 // max number of flows
 
    public:
+    
+    //TODO: add Cuda or other device
+    static constexpr bool derived_has_device_op() {
+      return false;
+    }
 
     using ttT = TT;
     using key_type = keyT;
@@ -930,14 +975,14 @@ namespace ttg_starpu {
                                      const Key &key) {
       using msg_t = detail::msg_t;
       auto &world_impl = world.impl();
-      std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), tp->taskpool_id,
-                                                            msg_header_t::MSG_GET_FROM_PULL, i,
-                                                            world.rank(), 1);
+      //TODO: Exhange tp->taskpool_id with ?
+      // std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), tp->taskpool_id,
+      //                                                       msg_header_t::MSG_GET_FROM_PULL, i,
+      //                                                       world.rank(), 1);
       /* pack the key */
-      size_t pos = 0;
-      pos = pack(key, msg->bytes, pos);
-      // parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-      //                   sizeof(msg_header_t) + pos);
+      // size_t pos = 0;
+      // pos = pack(key, msg->bytes, pos);
+      // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
     }
 
     template <std::size_t... IS, typename Key = keyT>
@@ -1406,10 +1451,10 @@ namespace ttg_starpu {
                   std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
-                    // detail::foreach_starpu_data(val, [&](parsec_data_t* data){
-                    //   /* decrement readers we incremented before the transfer */
-                    //   parsec_atomic_fetch_dec_int32(&data->device_copies[data->owner_device]->readers);
-                    // });
+                    detail::enumerate_starpu_data_copy(val, [&](auto *data){
+                      // TODO: decrement reader counter on StarPU equivalent data copy.
+                      (void)data;
+                    });
                     copy->drop_ref();
                   });
               return activation;
@@ -1498,15 +1543,16 @@ namespace ttg_starpu {
               }
             } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
               if (inline_data) {
-                // detail::foreach_starpu_data(val, [&](parsec_data_t* data){
-                //   read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
-                // });
+                detail::enumerate_starpu_data_copy(val, [&](auto *data){
+                  read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
+                });
               } else {
                 auto activation = create_activation_fn();
-                // detail::foreach_starpu_data(val, [&](parsec_data_t* data){
-                //   parsec_atomic_fetch_inc_int32(&data->device_copies[data->owner_device]->readers);
-                //   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
-                // });
+                detail::enumerate_starpu_data_copy(val, [&](auto *data){
+                  // TODO: map read references to StarPU reader semantics.
+                  (void)data;
+                  handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
+                });
               }
             }
 
@@ -1792,7 +1838,7 @@ namespace ttg_starpu {
             /* release the task if we're not deferred
              * TODO: can we delay that until we get the second value?
              */
-            if (copy->get_next_task() != &reduce_task->starpu_task) {
+            if (copy->get_next_task() != reduce_task->starpu_task) {
               reduce_task->release_task(reduce_task);
             }
 
@@ -1838,7 +1884,7 @@ namespace ttg_starpu {
           /* if we registered as a writer and were the first to register with this copy
            * we need to defer the release of this task to give other tasks a chance to
            * make a copy of the original data */
-          release = (copy->get_next_task() != &task->starpu_task);
+          release = (copy->get_next_task() != task->starpu_task);
           task->copies[i] = copy;
         } else {
           release = true;
@@ -1867,7 +1913,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        starpu_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
+        starpu_hash_table_insert(&task_constraint_table, &task->tt_ht_item.item);
       }
       return !constrained;
     }
@@ -1920,8 +1966,8 @@ namespace ttg_starpu {
             task_ring = &task->starpu_task;
           } else {
             /* push into the ring */
-            //parsec_list_item_ring_push_sorted(&task_ring->super, &task->starpu_task.super,
-                                              offsetof(starpu_task_t, priority));
+            // parsec_list_item_ring_push_sorted(&task_ring->super, &task->starpu_task.super,
+            //                                   offsetof(starpu_task_t, priority));
           }
         }
       }
@@ -1965,11 +2011,11 @@ namespace ttg_starpu {
 
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
-            starpu_task_t *vp_task_rings[1] = { &task->starpu_task };
+            starpu_task_t *vp_task_rings[1] = { task->starpu_task };
             //__parsec_schedule_vp(es, vp_task_rings, 0);
           } else if (*task_ring == nullptr) {
             /* the first task is set directly */
-            *task_ring = &task->starpu_task;
+            *task_ring = task->starpu_task;
           } else {
             /* push into the ring */
             // parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->starpu_task.super,
@@ -2064,8 +2110,8 @@ namespace ttg_starpu {
       auto &world_impl = world.impl();
       uint64_t pos = 0;
       int num_iovecs = 0;
-      std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                           msg_header_t::MSG_SET_ARG, i, world_impl.rank(), 1);
+      // std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+      //                                                      msg_header_t::MSG_SET_ARG, i, world_impl.rank(), 1);
 
       if constexpr (!ttg::meta::is_void_v<decvalueT>) {
 
@@ -2082,7 +2128,7 @@ namespace ttg_starpu {
         }
 
         bool inline_data = can_inline_data(value_ptr, copy, key, 1);
-        msg->tt_id.inline_data = inline_data;
+        // msg->tt_id.inline_data = inline_data;
 
         auto write_header_fn = [&]() {
           if (!inline_data) {
@@ -2145,7 +2191,7 @@ namespace ttg_starpu {
           num_iovecs = std::distance(std::begin(iovs), std::end(iovs));
           /* pack the metadata */
           auto metadata = descr.get_metadata(*const_cast<decvalueT *>(value_ptr));
-          pos = pack(metadata, msg->bytes, pos);
+          // pos = pack(metadata, msg->bytes, pos);
           //std::cout << "set_arg_impl splitmd num_iovecs " << num_iovecs << std::endl;
           write_header_fn();
           for (auto&& iov : iovs) {
@@ -2153,7 +2199,7 @@ namespace ttg_starpu {
           }
         } else if constexpr (!ttg::has_split_metadata<std::decay_t<Value>>::value) {
           /* serialize the object */
-          pos = pack(*value_ptr, msg->bytes, pos, copy);
+          // pos = pack(*value_ptr, msg->bytes, pos, copy);
           //detail::foreach_starpu_data(value, [&](parsec_data_t *data){ ++num_iovecs; });
           //std::cout << "POST pack num_iovecs " << num_iovecs << std::endl;
           /* handle any iovecs contained in it */
@@ -2170,21 +2216,20 @@ namespace ttg_starpu {
           // });
         }
 
-        msg->tt_id.num_iovecs = num_iovecs;
+        // msg->tt_id.num_iovecs = num_iovecs;
       }
 
       /* pack the key */
-      msg->tt_id.num_keys = 0;
-      msg->tt_id.key_offset = pos;
-      if constexpr (!ttg::meta::is_void_v<Key>) {
-        size_t tmppos = pack(key, msg->bytes, pos);
-        pos = tmppos;
-        msg->tt_id.num_keys = 1;
-      }
+      // msg->tt_id.num_keys = 0;
+      // msg->tt_id.key_offset = pos;
+      // if constexpr (!ttg::meta::is_void_v<Key>) {
+      //   size_t tmppos = pack(key, msg->bytes, pos);
+      //   pos = tmppos;
+      //   msg->tt_id.num_keys = 1;
+      // }
 
       //std::cout << "set_arg_impl send_am owner " << owner << " sender " << msg->tt_id.sender << std::endl;
-      // parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-      //                   sizeof(msg_header_t) + pos);
+      // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
     }
 
     template <int i, typename Iterator, typename Value>
@@ -2303,14 +2348,13 @@ namespace ttg_starpu {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                             msg_header_t::MSG_SET_ARGSTREAM_SIZE, i,
-                                                             world_impl.rank(), 1);
+        // std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+        //                                                      msg_header_t::MSG_SET_ARGSTREAM_SIZE, i,
+        //                                                      world_impl.rank(), 1);
         /* pack the key */
-        pos = pack(key, msg->bytes, pos);
-        pos = pack(size, msg->bytes, pos);
-        // parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-        //                   sizeof(msg_header_t) + pos);
+        // pos = pack(key, msg->bytes, pos);
+        // pos = pack(size, msg->bytes, pos);
+        // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
       } else {
         ttg::trace(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
 
@@ -2358,13 +2402,12 @@ namespace ttg_starpu {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                             msg_header_t::MSG_SET_ARGSTREAM_SIZE, i,
-                                                             world_impl.rank(), 0);
-        pos = pack(size, msg->bytes, pos);
+        // std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+        //                                                      msg_header_t::MSG_SET_ARGSTREAM_SIZE, i,
+        //                                                      world_impl.rank(), 0);
+        // pos = pack(size, msg->bytes, pos);
 
-        // parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-        //                   sizeof(msg_header_t) + pos);
+        // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
 
@@ -2411,18 +2454,17 @@ namespace ttg_starpu {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                             msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i,
-                                                             world_impl.rank(), 1);
-        /* pack the key */
-        pos = pack(key, msg->bytes, pos);
+        // std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+        //                                                      msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i,
+        //                                                      world_impl.rank(), 1);
+        // /* pack the key */
+        // pos = pack(key, msg->bytes, pos);
 
-        // parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-        //                   sizeof(msg_header_t) + pos);
+        // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
 
-        auto hk = reinterpret_cast<parsec_key_t>(&key);
+        auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task = nullptr;
         starpu_hash_table_lock_bucket(&tasks_table, hk);
         // if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
@@ -2461,18 +2503,17 @@ namespace ttg_starpu {
         using msg_t = detail::msg_t;
         auto &world_impl = world.impl();
         uint64_t pos = 0;
-        std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
-                                                             msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i,
-                                                             world_impl.rank(), 0);
+        // std::unique_ptr<msg_t> msg = std::make_unique<msg_t>(get_instance_id(), world_impl.taskpool()->taskpool_id,
+        //                                                      msg_header_t::MSG_FINALIZE_ARGSTREAM_SIZE, i,
+        //                                                      world_impl.rank(), 0);
 
-        // parsec_ce.send_am(&parsec_ce, world_impl.parsec_ttg_tag(), owner, static_cast<void *>(msg.get()),
-        //                   sizeof(msg_header_t) + pos);
+        // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
       } else {
         ttg::trace(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
 
         auto hk = static_cast<starpu_key_t>(0);
         task_t *task = nullptr;
-        if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
+        if (nullptr == (task = (task_t *)starpu_hash_table_find(&tasks_table, hk))) {
           ttg::print_error(world.rank(), ":", get_name(),
                            " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("TT::finalize called on stream that never received an input data");
@@ -2814,7 +2855,7 @@ namespace ttg_starpu {
         return buffer;
 
       if constexpr (ttg::meta::is_void_v<keyT>) {
-        snprintf(buffer, buffer_size, "%s()[]<%d>", starpu_task->task_class->name, starpu_task->priority);
+        snprintf(buffer, buffer_size, "%s()[]<%d>", starpu_task->name, starpu_task->priority);
       }  else {
         const task_t *task = reinterpret_cast<const task_t*>(starpu_task);
         std::stringstream ss;
@@ -2824,7 +2865,7 @@ namespace ttg_starpu {
         std::replace(keystr.begin(), keystr.end(), '(', ':');
         std::replace(keystr.begin(), keystr.end(), ')', ':');
 
-        snprintf(buffer, buffer_size, "%s(%s)[]<%d>", starpu_task->task_class->name, keystr.c_str(), starpu_task->priority);
+        snprintf(buffer, buffer_size, "%s(%s)[]<%d>", starpu_task->name, keystr.c_str(), starpu_task->priority);
       }
       return buffer;
     }
@@ -2976,10 +3017,11 @@ namespace ttg_starpu {
       // self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
       int nbthreads = 0;
-      auto *context = world_impl.context();
-      for (int i = 0; i < context->nb_vp; i++) {
-        nbthreads += context->virtual_processes[i]->nb_cores;
-      }
+      //TODO: May we use starpu_get_num_threads()
+      // auto *context = world_impl.context();
+      // for (int i = 0; i < context->nb_vp; i++) {
+      //   nbthreads += context->virtual_processes[i]->nb_cores;
+      // }
 
       // parsec_mempool_construct(&mempools, PARSEC_OBJ_CLASS(parsec_task_t), sizeof(task_t),
       //                          offsetof(parsec_task_t, mempool_owner), nbthreads);
@@ -3372,41 +3414,41 @@ namespace ttg_starpu {
 
     // Register the static_op function to associate it to instance_id
     void register_static_op_function(void) {
-      int rank;
-      MPI_Comm_rank(MPI_COMM_WORLD, &rank);
-      ttg::trace("ttg_starpu(", rank, ") Inserting into static_id_to_op_map at ", get_instance_id());
-      static_set_arg_fct_call_t call = std::make_pair(&TT::static_set_arg, this);
-      auto &world_impl = world.impl();
-      static_map_mutex.lock();
-      static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
-      if (delayed_unpack_actions.count(get_instance_id()) > 0) {
-        auto tp = world_impl.taskpool();
+    //   int rank;
+    //   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
+    //   ttg::trace("ttg_starpu(", rank, ") Inserting into static_id_to_op_map at ", get_instance_id());
+    //   static_set_arg_fct_call_t call = std::make_pair(&TT::static_set_arg, this);
+    //   auto &world_impl = world.impl();
+    //   static_map_mutex.lock();
+    //   static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
+    //   if (delayed_unpack_actions.count(get_instance_id()) > 0) {
+    //     auto tp = world_impl.taskpool();
 
-        ttg::trace("ttg_starpu(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()),
-                   " messages delayed with op_id ", get_instance_id());
+    //     ttg::trace("ttg_starpu(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()),
+    //                " messages delayed with op_id ", get_instance_id());
 
-        auto se = delayed_unpack_actions.equal_range(get_instance_id());
-        std::vector<static_set_arg_fct_arg_t> tmp;
-        for (auto it = se.first; it != se.second;) {
-          assert(it->first == get_instance_id());
-          tmp.push_back(std::move(it->second));
-          it = delayed_unpack_actions.erase(it);
-        }
-        static_map_mutex.unlock();
+    //     auto se = delayed_unpack_actions.equal_range(get_instance_id());
+    //     std::vector<static_set_arg_fct_arg_t> tmp;
+    //     for (auto it = se.first; it != se.second;) {
+    //       assert(it->first == get_instance_id());
+    //       tmp.push_back(std::move(it->second));
+    //       it = delayed_unpack_actions.erase(it);
+    //     }
+    //     static_map_mutex.unlock();
 
-        for (auto& it : tmp) {
-          if(ttg::tracing())
-            ttg::print("ttg_starpu(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
-                       std::get<1>(it).get(), ", ", std::get<2>(it), ")");
-          // int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
-          //                                    std::get<0>(it), NULL);
-          // assert(rc == 0);
-        }
+    //     for (auto& it : tmp) {
+    //       if(ttg::tracing())
+    //         ttg::print("ttg_starpu(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
+    //                    std::get<1>(it).get(), ", ", std::get<2>(it), ")");
+    //       // int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
+    //       //                                    std::get<0>(it), NULL);
+    //       // assert(rc == 0);
+    //     }
 
-        tmp.clear();
-      } else {
-        static_map_mutex.unlock();
-      }
+    //     tmp.clear();
+    //   } else {
+    //     static_map_mutex.unlock();
+    //   }
     }
   };
 

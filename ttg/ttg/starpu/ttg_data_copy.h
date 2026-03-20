@@ -9,18 +9,16 @@
 #include <atomic>
 #include <type_traits>
 
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-#include <cuda_runtime.h>
-#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
-#include <parsec.h>
+#include <starpu.h>
 
-#include "ttg/parsec/thread_local.h"
-#include "ttg/parsec/parsec-ext.h"
+#include "ttg/starpu/thread_local.h"
+#include "ttg/starpu/starpu-ext.h"
 #include "ttg/util/span.h"
 
 
-namespace ttg_parsec {
+namespace ttg_starpu {
+
 
   namespace detail {
 
@@ -37,16 +35,14 @@ namespace ttg_parsec {
     };
 
     /* special type: stores a pointer to the ttg_data_copy_t. This is necessary
-     * because ttg_data_copy_t has virtual functions so we cannot cast from parsec_data_copy_t
+     * because ttg_data_copy_t has virtual functions so we cannot cast from starpu_data_copy_t
      * to ttg_data_copy_t (offsetof is not supported for virtual classes).
      * The self pointer is a back-pointer to the ttg_data_copy_t. */
     struct ttg_data_copy_self_t {
-      parsec_list_item_t super;
       ttg_data_copy_t *self;
       ttg_data_copy_self_t(ttg_data_copy_t* dc)
       : self(dc)
       {
-        PARSEC_OBJ_CONSTRUCT(&super, parsec_list_item_t);
       }
     };
 
@@ -76,18 +72,18 @@ namespace ttg_parsec {
       ttg_data_copy_t(ttg_data_copy_t&& c)
       : ttg_data_copy_self_t(this)
       , m_next_task(c.m_next_task)
-      , m_readers(c.m_readers)
+      , m_readers(c.m_readers.load(std::memory_order_relaxed))
       , m_refs(c.m_refs.load(std::memory_order_relaxed))
       {
-        c.m_readers = 0;
+        c.m_readers.store(0, std::memory_order_relaxed);
       }
 
       ttg_data_copy_t& operator=(ttg_data_copy_t&& c)
       {
         m_next_task = c.m_next_task;
         c.m_next_task = nullptr;
-        m_readers = c.m_readers;
-        c.m_readers = 0;
+        m_readers.store(c.m_readers.load(std::memory_order_relaxed), std::memory_order_relaxed);
+        c.m_readers.store(0, std::memory_order_relaxed);
         m_refs.store(c.m_refs.load(std::memory_order_relaxed), std::memory_order_relaxed);
         c.m_refs.store(0, std::memory_order_relaxed);
         return *this;
@@ -106,12 +102,12 @@ namespace ttg_parsec {
 
       /* Returns true if the copy is mutable */
       bool is_mutable() const {
-        return m_readers == mutable_tag;
+        return m_readers.load(std::memory_order_relaxed) == mutable_tag;
       }
 
       /* Mark the copy as mutable */
       void mark_mutable() {
-        m_readers = mutable_tag;
+        m_readers.store(mutable_tag, std::memory_order_relaxed);
       }
 
       /* Increment the reader counter and return previous value
@@ -120,11 +116,11 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int increment_readers() {
         if constexpr(Atomic) {
-          return parsec_atomic_fetch_inc_int32(&m_readers);
-//          std::atomic_ref<int32_t> a{m_readers};
-//          return a.fetch_add(1, std::memory_order_relaxed);
+          return m_readers.fetch_add(1, std::memory_order_relaxed);
         } else {
-          return m_readers++;
+          int val = m_readers.load(std::memory_order_relaxed);
+          m_readers.store(val + 1, std::memory_order_relaxed);
+          return val;
         }
       }
 
@@ -132,8 +128,9 @@ namespace ttg_parsec {
       * Reset the number of readers to read-only with a single reader.
       */
       void reset_readers() {
-        if (mutable_tag == m_readers) {
-          m_readers = 1;
+        int current = m_readers.load(std::memory_order_relaxed);
+        if (mutable_tag == current) {
+          m_readers.store(1, std::memory_order_relaxed);
         }
       }
 
@@ -143,28 +140,28 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int decrement_readers() {
         if constexpr(Atomic) {
-          return parsec_atomic_fetch_dec_int32(&m_readers);
-//          std::atomic_ref<int32_t> a{m_readers};
-//          return a.fetch_sub(1, std::memory_order_relaxed);
+          return m_readers.fetch_sub(1, std::memory_order_relaxed);
         } else {
-          return m_readers--;
+          int val = m_readers.load(std::memory_order_relaxed);
+          m_readers.store(val - 1, std::memory_order_relaxed);
+          return val;
         }
       }
 
       /* Returns the number of readers if the copy is immutable, or \c mutable_tag
       * if the copy is mutable */
       int num_readers() const {
-        return m_readers;
+        return m_readers.load(std::memory_order_relaxed);
       }
 
       /* Returns the pointer to the user data wrapped by the the copy object */
       virtual void* get_ptr() = 0;
 
-      parsec_task_t* get_next_task() const {
+      starpu_task_t* get_next_task() const {
         return m_next_task;
       }
 
-      void set_next_task(parsec_task_t* task) {
+      void set_next_task(starpu_task_t* task) {
         m_next_task = task;
       }
 
@@ -184,13 +181,10 @@ namespace ttg_parsec {
         return m_refs.load(std::memory_order_relaxed);
       }
 
-#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
-      int64_t size;
-      int64_t uid;
-#endif
+
     protected:
-      parsec_task_t *m_next_task = nullptr;
-      int32_t        m_readers  = 1;
+      starpu_task_t *m_next_task = nullptr;
+      std::atomic<int32_t>  m_readers  = 1;
       std::atomic<int32_t>  m_refs = 1;                     //< number of entities referencing this copy (TTGs, external)
     };
 
@@ -272,6 +266,6 @@ namespace ttg_parsec {
     };
   } // namespace detail
 
-} // namespace ttg_parsec
+} // namespace ttg_starpu
 
 #endif // TTG_DATA_COPY_H
