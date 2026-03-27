@@ -8,6 +8,7 @@ typedef uintptr_t starpu_key_t;
 typedef struct starpu_hash_table_item_s starpu_hash_table_item_t;
 struct starpu_hash_table_item_s {
     starpu_hash_table_item_t *next_item;
+    //starpu_task_t *task;
     uint64_t hash64;
     starpu_key_t key;
 };

@@ -22,7 +22,6 @@ namespace ttg_starpu {
     struct device_ptr_t {
       // Placeholder for future device support
       // starpu_data_handle_t* data_handles = nullptr;
-      // etc...
     };
 
     template<bool SupportDevice>
@@ -191,7 +190,7 @@ namespace ttg_starpu {
     struct starpu_ttg_task_t;
 
     /* Non-streaming task specialization */
-    template <typename TT>
+    template <typename TT, bool KeyIsVoid = ttg::meta::is_void_v<typename TT::key_type>>
     struct starpu_ttg_task_t<TT, false> : public starpu_ttg_task_base_t {
       using key_type = typename TT::key_type;
       TT* tt = nullptr;

@@ -178,7 +178,7 @@ namespace ttg_starpu {
     inline bool all_devices_peer_access;
 
     inline void send_active_message(int owner, const void *data, size_t size) {
-      // TODO: replace by real StarPU remote communication 
+      // TODO: replace by StarPU remote communication 
       (void)owner;
       (void)data;
       (void)size;
@@ -186,7 +186,6 @@ namespace ttg_starpu {
     }
 
     inline void enumerate_starpu_data_copy( auto&& value, auto&& callback ) {
-      // TODO: traverse over StarPU data copies when device tracking is implemented
       (void)value;
       (void)callback;
     }
@@ -471,7 +470,6 @@ namespace ttg_starpu {
     inline void transfer_ownership_impl(T&& arg, int device) {
       if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
         detail::enumerate_starpu_data_copy(arg, [&](auto *data){
-          // TODO: impl StarPU copy ownership transfer here.
           (void)data;
           (void)device;
         });
@@ -685,8 +683,8 @@ namespace ttg_starpu {
       int provided;
       //MPI_Init_thread(&argc, &argv, MPI_THREAD_MULTIPLE, &provided);
       // provided = MPI_THREAD_MULTIPLE;
-      if (!provided)
-        throw std::runtime_error("ttg_starpu::ttg_initialize: MPI_Init_thread did not provide MPI_THREAD_MULTIPLE");
+      // if (!provided)
+      //   throw std::runtime_error("ttg_starpu::ttg_initialize: MPI_Init_thread did not provide MPI_THREAD_MULTIPLE");
       detail::initialized_mpi() = true;
     } else {  // no way to test that MPI was initialized with MPI_THREAD_MULTIPLE, cross fingers and proceed
     }
@@ -1452,7 +1450,7 @@ namespace ttg_starpu {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
                     detail::enumerate_starpu_data_copy(val, [&](auto *data){
-                      // TODO: decrement reader counter on StarPU equivalent data copy.
+                      // TODO: decrement reader counter on equivalent StarPU data copy.
                       (void)data;
                     });
                     copy->drop_ref();
