@@ -191,7 +191,7 @@ namespace ttg_starpu {
 
     /* Non-streaming task specialization */
     template <typename TT, bool KeyIsVoid = ttg::meta::is_void_v<typename TT::key_type>>
-    struct starpu_ttg_task_t<TT, false> : public starpu_ttg_task_base_t {
+    struct starpu_ttg_task_t : public starpu_ttg_task_base_t {
       using key_type = typename TT::key_type;
       TT* tt = nullptr;
       key_type key;
