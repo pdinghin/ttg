@@ -184,11 +184,6 @@ namespace ttg_starpu {
       bool is_dummy() { return dummy; }
     };
 
-    /* Main TTG task template for StarPU
-     * TODO: Implement StarPU task execution hooks */
-    template <typename TT, bool Streaming = false>
-    struct starpu_ttg_task_t;
-
     /* Non-streaming task specialization */
     template <typename TT, bool KeyIsVoid = ttg::meta::is_void_v<typename TT::key_type>>
     struct starpu_ttg_task_t : public starpu_ttg_task_base_t {
