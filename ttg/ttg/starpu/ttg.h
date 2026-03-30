@@ -198,8 +198,7 @@ namespace ttg_starpu {
     bool _task_profiling;
     std::array<bool, static_cast<std::size_t>(ttg::ExecutionSpace::Invalid)>
                mpi_space_support = {true, false, false};
-    void *ctx = nullptr;
-    bool own_ctx = false;
+
 
     int query_comm_size() {
       int comm_size;
@@ -270,15 +269,23 @@ namespace ttg_starpu {
 
     ~WorldImpl() { destroy(); }
 
-    // static constexpr int parsec_ttg_tag() { return PARSEC_DSL_TTG_TAG; }
-    // static constexpr int parsec_ttg_rma_tag() { return PARSEC_DSL_TTG_RMA_TAG; }
+    //TODO: need to define or not?
+    static constexpr int starpu_ttg_tag() { return 0; }
+    static constexpr int starpu_ttg_rma_tag() { return 0; }
 
-    // MPI_Comm comm() const { return MPI_COMM_WORLD; }
+    //TODO: delete when mpi support is added
+    #ifndef MPI_Comm
+      #define MPI_Comm int
+    #endif
+    MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
     virtual void execute() override {
       
     }
 
+    void destroy_tpool() {
+      //No taskpool in starpu
+    }
     virtual void destroy() override {
       if (is_valid()) {
         release_ops();
@@ -310,6 +317,12 @@ namespace ttg_starpu {
     virtual void dag_off() override {
     }
 
+    virtual void profile_off() override {}
+
+    virtual void profile_on() override {}
+
+    virtual bool profiling() override { return false;}
+
     bool mpi_support(ttg::ExecutionSpace space) {
       return mpi_space_support[static_cast<std::size_t>(space)];
     }
@@ -332,6 +345,11 @@ namespace ttg_starpu {
       execute();
     }
 
+   private: 
+      void *ctx = nullptr;
+      bool own_ctx = false;  //< whether I own the context
+      void *tpool = nullptr;
+      bool parsec_taskpool_started = false;
   };
 
   // static void unregister_parsec_tags(void *_pidx)
@@ -1547,7 +1565,6 @@ namespace ttg_starpu {
               } else {
                 auto activation = create_activation_fn();
                 detail::enumerate_starpu_data_copy(val, [&](auto *data){
-                  // TODO: map read references to StarPU reader semantics.
                   (void)data;
                   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
                 });
@@ -1750,6 +1767,7 @@ namespace ttg_starpu {
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
         has_lock = true;
+        
         starpu_hash_table_lock_bucket(&tasks_table, hk);
         // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
         //   task = create_new_task(key);
