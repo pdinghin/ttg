@@ -226,6 +226,12 @@ namespace ttg_starpu {
 
     }
 
+   public:
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+    int starpu_ttg_profile_backend_set_arg_start, starpu_ttg_profile_backend_set_arg_end;
+    int starpu_ttg_profile_backend_bcast_arg_start, starpu_ttg_profile_backend_bcast_arg_end;
+    int starpu_ttg_profile_backend_allocate_datacopy, starpu_ttg_profile_backend_free_datacopy;
+#endif
     WorldImpl(int *argc, char **argv[], int ncores, void *c = nullptr)
         : WorldImplBase(query_comm_size(), query_comm_rank())
         , ctx(c)
@@ -274,6 +280,11 @@ namespace ttg_starpu {
     static constexpr int starpu_ttg_tag() { return 0; }
     static constexpr int starpu_ttg_rma_tag() { return 0; }
 
+    //TODO: delete when mpi support is added
+    #ifndef MPI_Comm
+      #define MPI_Comm int
+    #endif
+    MPI_Comm comm() const { return 0; }
 
     virtual void execute() override {
       
@@ -345,7 +356,7 @@ namespace ttg_starpu {
       void *ctx = nullptr;
       bool own_ctx = false;  //< whether I own the context
       void *tpool = nullptr;
-      bool starpu_taskpool_started = false;
+      bool parsec_taskpool_started = false;
   };
 
   // static void unregister_parsec_tags(void *_pidx)
@@ -1786,12 +1797,12 @@ namespace ttg_starpu {
         task = create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
-        if( world.impl().dag_profiling() ) {
+        if( world_impl.dag_profiling() ) {
 
         }
       }
 
-      if( world.impl().dag_profiling() ) {
+      if( world_impl.dag_profiling() ) {
 
       }
 
