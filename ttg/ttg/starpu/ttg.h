@@ -227,6 +227,11 @@ namespace ttg_starpu {
     }
 
    public:
+#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
+    int starpu_ttg_profile_backend_set_arg_start, starpu_ttg_profile_backend_set_arg_end;
+    int starpu_ttg_profile_backend_bcast_arg_start, starpu_ttg_profile_backend_bcast_arg_end;
+    int starpu_ttg_profile_backend_allocate_datacopy, starpu_ttg_profile_backend_free_datacopy;
+#endif
     WorldImpl(int *argc, char **argv[], int ncores, void *c = nullptr)
         : WorldImplBase(query_comm_size(), query_comm_rank())
         , ctx(c)
@@ -250,10 +255,12 @@ namespace ttg_starpu {
 
 
     auto *context() { return ctx; }
-    //auto *execution_stream() { return parsec_my_execution_stream(); }
+    void *execution_stream() {return nullptr;}
+    void *taskpool() {return nullptr;}
 
-
-  
+    void create_tpool() {
+      //No taskpool in starpu
+    }
 
     /* Deleted copy ctor */
     WorldImpl(const WorldImpl &other) = delete;
@@ -277,7 +284,7 @@ namespace ttg_starpu {
     #ifndef MPI_Comm
       #define MPI_Comm int
     #endif
-    MPI_Comm comm() const { return MPI_COMM_WORLD; }
+    MPI_Comm comm() const { return 0; }
 
     virtual void execute() override {
       
