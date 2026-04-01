@@ -1711,7 +1711,8 @@ namespace ttg_starpu {
       }
 
       for (int i = 0; i < static_stream_goal.size(); ++i) {
-        newtask->streams[i].goal = static_stream_goal[i];
+        //TODO : uncommennt when task constructor is implemented.
+        //newtask->streams[i].goal = static_stream_goal[i];
       }
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
