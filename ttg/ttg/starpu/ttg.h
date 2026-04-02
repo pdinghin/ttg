@@ -1776,6 +1776,7 @@ namespace ttg_starpu {
       if (numins > 1 || reducer) {
         has_lock = true;
         
+        //task_table.starpu_hash_table_emplace_or_visit(hk, );
         starpu_hash_table_lock_bucket(&tasks_table, hk);
         // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
         //   task = create_new_task(key);

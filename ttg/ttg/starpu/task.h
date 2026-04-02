@@ -103,11 +103,8 @@ namespace ttg_starpu {
       ttg_data_copy_t **copies;              //< pointer to the fixed copies array of the derived task
       
       /* Hash table item for task tracking */
-      struct {
-        starpu_hash_table_item_t item;
-        uint64_t key;
-      } tt_ht_item;
-
+      starpu_hash_table_item_t tt_ht_item = {};
+      
       struct stream_info_t {
         std::size_t goal;
         std::size_t size;
@@ -219,7 +216,7 @@ namespace ttg_starpu {
 
       template<ttg::ExecutionSpace Space>
       int invoke_op() {
-        // TODO: Implement StarPU task invocation
+        // TODO: Implement StarPU task invoke_op
         // if constexpr (Space == ttg::ExecutionSpace::Host) {
         //   return TT::static_op(this);
         // }
