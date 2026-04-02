@@ -341,7 +341,6 @@ namespace ttg_parsec {
       create_tpool();
     }
 
-
     auto *context() { return ctx; }
     auto *execution_stream() { return parsec_my_execution_stream(); }
     auto *taskpool() { return tpool; }
@@ -2455,7 +2454,7 @@ namespace ttg_parsec {
       parsec_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
         hk = reinterpret_cast<parsec_key_t>(&key);
-        assert(keymap(key) == world.rank());
+        assert(keymap(key) == world.rank()); 
       }
 
       task_t *task;

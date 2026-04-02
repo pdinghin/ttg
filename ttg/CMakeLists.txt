@@ -298,7 +298,7 @@ if(TARGET MyProject::StarPU)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ttvalue.h
           )
   find_package(MPI)
-  set(ttg-starpu-deps "ttg;MPI::MPI_CXX;MyProject::StarPU")
+  set(ttg-starpu-deps "ttg;MPI::MPI_CXX;MyProject::StarPU;Boost::headers")
   add_ttg_library(ttg-starpu "${ttg-starpu-headers}"
                   PUBLIC_HEADER "${ttg-starpu-headers}"
                   LINK_LIBRARIES "${ttg-starpu-deps}"

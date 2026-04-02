@@ -74,4 +74,15 @@ endif()
 
 if (TARGET Boost::headers)
     set(TTG_HAS_BOOST 1)
+    file(GLOB _boost_module_includes "${boost_SOURCE_DIR}/libs/*/include")
+
+    get_target_property(_boost_headers_real_target Boost::headers ALIASED_TARGET)
+    if (NOT _boost_headers_real_target)
+        set(_boost_headers_real_target Boost::headers)
+    endif()
+
+    foreach(_inc_path IN LISTS _boost_module_includes)
+        set_property(TARGET ${_boost_headers_real_target} APPEND PROPERTY
+            INTERFACE_INCLUDE_DIRECTORIES "$<BUILD_INTERFACE:${_inc_path}>")
+    endforeach()
 endif()

@@ -806,29 +806,37 @@ namespace ttg_starpu {
   }
 
   namespace detail {
+    template <typename TT>
     struct StarPUTTBase {
      protected:
       starpu_codelet_t * self_task_class = nullptr;
-      starpu_hash_table_t tasks_table;
-      starpu_hash_table_t task_constraint_table;
+      std::unique_ptr<starpu_hash_table<TT>> tasks_table;
+      std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
-      StarPUTTBase() {
+      StarPUTTBase() 
+        : tasks_table(),
+          task_constraint_table()
+      {
         // TODO: Initialize starpu_codelet_t
         self_task_class = nullptr;
       }
+
+      /* Accessors to maintain API compatibility with previous direct member access
+       * The operator-> allows using this->tasks_table->method() transparently */
 
       ~StarPUTTBase() {
         if (nullptr != self_task_class) {
           // starpu_task_class_destroy(self_task_class);
           self_task_class = nullptr;
         }
+        // unique_ptr destructor automatically cleans up tasks_table and task_constraint_table
       }
     };
 
   }  // namespace detail
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
-  class TT : public ttg::TTBase, detail::StarPUTTBase {
+  class TT : public ttg::TTBase, detail::StarPUTTBase<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>> {
    private:
     /// preconditions
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
@@ -1693,22 +1701,19 @@ namespace ttg_starpu {
     }
 
     template <typename Key>
-    task_t *create_new_task(const Key &key) {
+    task_t create_new_task(const Key &key) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
-      task_t *newtask;
-      // parsec_thread_mempool_t *mempool = get_task_mempool();
-      // char *taskobj = (char *)parsec_thread_mempool_allocate(mempool);
       int32_t priority = 0;
-      if constexpr (!keyT_is_Void) {
-        priority = priomap(key);
-        /* placement-new the task */
-        //newtask = new (taskobj) task_t(key, mempool, &this->self, world_impl.taskpool(), this, priority);
-      } else {
-        priority = priomap();
-        /* placement-new the task */
-        //newtask = new (taskobj) task_t(mempool, &this->self, world_impl.taskpool(), this, priority);
-      }
+      task_t newtask = [&]() -> task_t {
+        if constexpr (!keyT_is_Void) {
+          //apply priomap with key
+          return task_t(key, priority, this);
+        } else {
+          //apply priomap without key
+          return task_t(priority, this);
+        }
+      }();
 
       for (int i = 0; i < static_stream_goal.size(); ++i) {
         //TODO : uncommennt when task constructor is implemented.
@@ -1771,159 +1776,145 @@ namespace ttg_starpu {
       bool remove_from_hash = true;
 
       bool get_pull_data = false;
-      bool has_lock = false;
       /* If we have only one input and no reducer on that input we can skip the hash table */
+
+      auto callback_fn = [&](task_t *task) {
+        auto get_copy_fn = [&](detail::starpu_ttg_task_base_t *task, auto&& value, bool is_const){
+          detail::ttg_data_copy_t *copy = copy_in;
+          if (nullptr == copy && nullptr != detail::starpu_ttg_caller) {
+            copy = detail::find_copy_in_task(detail::starpu_ttg_caller, &value);
+          }
+          if (nullptr != copy) {
+            /* retain the data copy */
+            copy = detail::register_data_copy<valueT>(copy, task, is_const);
+          } else {
+            /* create a new copy */
+            copy = detail::create_new_datacopy(std::forward<Value>(value));
+            if (!is_const) {
+              copy->mark_mutable();
+            }
+          }
+          return copy;
+        };
+
+        if (reducer && 1 != task->streams[i].goal) {  // is this a streaming input? reduce the received value
+          auto submit_reducer_task = [&](auto *parent_task){
+            /* check if we need to create a task */
+            std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_acquire);
+            //std::cout << "submit_reducer_task " << key << " c " << c << std::endl;
+            if (0 == c) {
+              /* we are responsible for creating the reduction task */
+              detail::reducer_task_t *reduce_task;
+              reduce_task = create_new_reducer_task<i>(parent_task, false);
+              reduce_task->release_task(reduce_task); // release immediately
+            }
+          };
+
+          if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
+            // have a value already? if not, set, otherwise reduce
+            detail::ttg_data_copy_t *copy = nullptr;
+            if (nullptr == (copy = task->copies[i])) {
+              using decay_valueT = std::decay_t<valueT>;
+
+              /* first input value, create a task and bind it to the copy */
+              //std::cout << "Creating new reducer task for " << key << std::endl;
+              detail::reducer_task_t *reduce_task;
+              reduce_task = create_new_reducer_task<i>(task, true);
+
+              /* protected by the bucket lock */
+              task->streams[i].size = 1;
+              task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
+
+              /* get the copy to use as input for this task */
+              detail::ttg_data_copy_t *copy = get_copy_fn(reduce_task, std::forward<Value>(value), false);
+
+              /* put the copy into the task */
+              task->copies[i] = copy;
+
+              /* release the task if we're not deferred
+              * TODO: can we delay that until we get the second value?
+              */
+              if (copy->get_next_task() != reduce_task->starpu_task) {
+                reduce_task->release_task(reduce_task);
+              }
+
+            } else {
+
+
+              /* get the copy to use as input for this task */
+              detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
+
+              /* enqueue the data copy to be reduced */
+              // parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
+              submit_reducer_task(task);
+            }
+          } else {
+
+            submit_reducer_task(task);
+          }
+          //if (release) {
+          //  parsec_hash_table_nolock_remove(&tasks_table, hk);
+          //  remove_from_hash = false;
+          //}
+          //parsec_hash_table_unlock_bucket(&tasks_table, hk);
+        } else {
+          
+          /* whether the task needs to be deferred or not */
+          if constexpr (!valueT_is_Void) {
+            if (nullptr != task->copies[i]) {
+              ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
+              throw std::logic_error("bad set arg");
+            }
+
+            /* get the copy to use as input for this task */
+            detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), input_is_const);
+
+            /* if we registered as a writer and were the first to register with this copy
+            * we need to defer the release of this task to give other tasks a chance to
+            * make a copy of the original data */
+            release = (copy->get_next_task() != task->starpu_task);
+            task->copies[i] = copy;
+          } else {
+            release = true;
+          }
+        }
+        //TODO: Call release_task outside of callback_fn
+        // task->remove_from_hash = remove_from_hash;
+        // if (release) {
+        //   release_task(task, task_ring);
+        // }
+        /* if not pulling lazily, pull the data here */
+        if constexpr (!ttg::meta::is_void_v<keyT>) {
+          if (get_pull_data) {
+            invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
+          }
+        }
+      };
+
+
       if (numins > 1 || reducer) {
-        has_lock = true;
         
-        //task_table.starpu_hash_table_emplace_or_visit(hk, );
-        starpu_hash_table_lock_bucket(&tasks_table, hk);
-        // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-        //   task = create_new_task(key);
+        this->tasks_table->starpu_hash_table_emplace_or_visit(hk, [&](task_t &item) {
+          if(!reducer && numins == (item.in_data_count + 1)) {
+            //TODO: May we use remove_from_hash or another boolean to call erase_if after
+            remove_from_hash = false;
+            callback_fn(&item);
+          }
+        }, create_new_task(key));
+        //TODO: add this in create_new task or in new function that call create_new_task(look if we use create_new_task in other place without hash table)
         //   world_impl.increment_created();
-        //   parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
         //   get_pull_data = !is_lazy_pull();
         //   if( world_impl.dag_profiling() ) {
         //   }
-        // } else if (!reducer && numins == (task->in_data_count + 1)) {
-        //   /* remove while we have the lock */
-        //   parsec_hash_table_nolock_remove(&tasks_table, hk);
-        //   remove_from_hash = false;
-        // }
-        // /* if we have a reducer, we need to hold on to the lock for just a little longer */
-        if (!reducer) {
-          starpu_hash_table_unlock_bucket(&tasks_table, hk);
-          has_lock = false;
-        }
       } else {
-        task = create_new_task(key);
+        *task = create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
+        callback_fn(task);
         if( world_impl.dag_profiling() ) {
-
         }
       }
-
       if( world_impl.dag_profiling() ) {
-
-      }
-
-      auto get_copy_fn = [&](detail::starpu_ttg_task_base_t *task, auto&& value, bool is_const){
-        detail::ttg_data_copy_t *copy = copy_in;
-        if (nullptr == copy && nullptr != detail::starpu_ttg_caller) {
-          copy = detail::find_copy_in_task(detail::starpu_ttg_caller, &value);
-        }
-        if (nullptr != copy) {
-          /* retain the data copy */
-          copy = detail::register_data_copy<valueT>(copy, task, is_const);
-        } else {
-          /* create a new copy */
-          copy = detail::create_new_datacopy(std::forward<Value>(value));
-          if (!is_const) {
-            copy->mark_mutable();
-          }
-        }
-        return copy;
-      };
-
-      if (reducer && 1 != task->streams[i].goal) {  // is this a streaming input? reduce the received value
-        auto submit_reducer_task = [&](auto *parent_task){
-          /* check if we need to create a task */
-          std::size_t c = parent_task->streams[i].reduce_count.fetch_add(1, std::memory_order_acquire);
-          //std::cout << "submit_reducer_task " << key << " c " << c << std::endl;
-          if (0 == c) {
-            /* we are responsible for creating the reduction task */
-            detail::reducer_task_t *reduce_task;
-            reduce_task = create_new_reducer_task<i>(parent_task, false);
-            reduce_task->release_task(reduce_task); // release immediately
-          }
-        };
-
-        if constexpr (!ttg::meta::is_void_v<valueT>) {  // for data values
-          // have a value already? if not, set, otherwise reduce
-          detail::ttg_data_copy_t *copy = nullptr;
-          if (nullptr == (copy = task->copies[i])) {
-            using decay_valueT = std::decay_t<valueT>;
-
-            /* first input value, create a task and bind it to the copy */
-            //std::cout << "Creating new reducer task for " << key << std::endl;
-            detail::reducer_task_t *reduce_task;
-            reduce_task = create_new_reducer_task<i>(task, true);
-
-            /* protected by the bucket lock */
-            task->streams[i].size = 1;
-            task->streams[i].reduce_count.store(1, std::memory_order_relaxed);
-
-            /* get the copy to use as input for this task */
-            detail::ttg_data_copy_t *copy = get_copy_fn(reduce_task, std::forward<Value>(value), false);
-
-            /* put the copy into the task */
-            task->copies[i] = copy;
-
-            /* release the task if we're not deferred
-             * TODO: can we delay that until we get the second value?
-             */
-            if (copy->get_next_task() != reduce_task->starpu_task) {
-              reduce_task->release_task(reduce_task);
-            }
-
-            /* now we can unlock the bucket */
-            starpu_hash_table_unlock_bucket(&tasks_table, hk);
-          } else {
-            /* unlock the bucket, the lock is not needed anymore */
-            starpu_hash_table_unlock_bucket(&tasks_table, hk);
-
-            /* get the copy to use as input for this task */
-            detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
-
-            /* enqueue the data copy to be reduced */
-            // parsec_lifo_push(&task->streams[i].reduce_copies, &copy->super);
-            submit_reducer_task(task);
-          }
-        } else {
-          /* unlock the bucket, the lock is not needed anymore */
-          starpu_hash_table_unlock_bucket(&tasks_table, hk);
-          /* submit reducer for void values to handle side effects */
-          submit_reducer_task(task);
-        }
-        //if (release) {
-        //  parsec_hash_table_nolock_remove(&tasks_table, hk);
-        //  remove_from_hash = false;
-        //}
-        //parsec_hash_table_unlock_bucket(&tasks_table, hk);
-      } else {
-        /* unlock the bucket, the lock is not needed anymore */
-        if (has_lock) {
-          starpu_hash_table_unlock_bucket(&tasks_table, hk);
-        }
-        /* whether the task needs to be deferred or not */
-        if constexpr (!valueT_is_Void) {
-          if (nullptr != task->copies[i]) {
-            ttg::print_error(get_name(), " : ", key, ": error argument is already set : ", i);
-            throw std::logic_error("bad set arg");
-          }
-
-          /* get the copy to use as input for this task */
-          detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), input_is_const);
-
-          /* if we registered as a writer and were the first to register with this copy
-           * we need to defer the release of this task to give other tasks a chance to
-           * make a copy of the original data */
-          release = (copy->get_next_task() != task->starpu_task);
-          task->copies[i] = copy;
-        } else {
-          release = true;
-        }
-      }
-      task->remove_from_hash = remove_from_hash;
-      if (release) {
-        release_task(task, task_ring);
-      }
-      /* if not pulling lazily, pull the data here */
-      if constexpr (!ttg::meta::is_void_v<keyT>) {
-        if (get_pull_data) {
-          invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
-        }
       }
     }
 
@@ -1938,7 +1929,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        starpu_hash_table_insert(&task_constraint_table, &task->tt_ht_item.item);
+        //starpu_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
       }
       return !constrained;
     }
@@ -2032,7 +2023,7 @@ namespace ttg_starpu {
             ttg::trace(world.rank(), ":", get_name(), ": submitting task for op ");
           }
         }
-        if (task->remove_from_hash) starpu_hash_table_remove(&tasks_table, hk);
+        if (task->remove_from_hash) this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
 
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
@@ -2385,7 +2376,7 @@ namespace ttg_starpu {
 
         auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task;
-        starpu_hash_table_lock_bucket(&tasks_table, hk);
+        // starpu_hash_table_lock_bucket(&tasks_table, hk);
         // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
         //   task = create_new_task(key);
         //   world.impl().increment_created();
@@ -2393,7 +2384,7 @@ namespace ttg_starpu {
         //   if( world.impl().dag_profiling() ) {
         //   }
         // }
-        starpu_hash_table_unlock_bucket(&tasks_table, hk);
+        // starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2438,7 +2429,7 @@ namespace ttg_starpu {
 
         starpu_key_t hk = 0;
         task_t *task;
-        starpu_hash_table_lock_bucket(&tasks_table, hk);
+        // starpu_hash_table_lock_bucket(&tasks_table, hk);
         // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
         //   task = create_new_task(ttg::Void{});
         //   world.impl().increment_created();
@@ -2447,7 +2438,7 @@ namespace ttg_starpu {
 
         //   }
         // }
-        starpu_hash_table_unlock_bucket(&tasks_table, hk);
+        // starpu_hash_table_unlock_bucket(&tasks_table, hk);
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2491,7 +2482,7 @@ namespace ttg_starpu {
 
         auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task = nullptr;
-        starpu_hash_table_lock_bucket(&tasks_table, hk);
+        // starpu_hash_table_lock_bucket(&tasks_table, hk);
         // if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
         //   ttg::print_error(world.rank(), ":", get_name(), ":", key,
         //                    " : error finalize called on stream that never received an input data: ", i);
@@ -2538,7 +2529,13 @@ namespace ttg_starpu {
 
         auto hk = static_cast<starpu_key_t>(0);
         task_t *task = nullptr;
-        if (nullptr == (task = (task_t *)starpu_hash_table_find(&tasks_table, hk))) {
+        std::size_t c;
+        // hash_table_find without lock 
+        if (!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
+              item.second->streams[i].goal = 1;
+              c = item.second->streams[i].reduce_count.load(std::memory_order_acquire);
+              task = &item.second;
+            })) {
           ttg::print_error(world.rank(), ":", get_name(),
                            " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("TT::finalize called on stream that never received an input data");
@@ -2552,9 +2549,6 @@ namespace ttg_starpu {
         // 2) set the goal
         // 3) "unlock" the stream
         // only one thread will see the reduce_count be zero and the goal match the size
-        task->streams[i].reduce_count.fetch_add(1, std::memory_order_acquire);
-        task->streams[i].goal = 1;
-        auto c = task->streams[i].reduce_count.fetch_sub(1, std::memory_order_release);
         if (1 == c && (task->streams[i].size >= 1)) {
           release_task(task);
         }
