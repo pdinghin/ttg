@@ -13,10 +13,10 @@ namespace ttg_starpu {
 
 
     template <typename TT>
-    class starpu_hash_table : public boost::unordered::concurrent_flat_map<starpu_key_t, *detail::starpu_ttg_task_t<TT>> {
+    class starpu_hash_table : public boost::unordered::concurrent_flat_map<starpu_key_t, detail::starpu_ttg_task_t<TT>*> {
         private:
         using task_t = detail::starpu_ttg_task_t<TT>;
-        using flat_map_t = boost::unordered::concurrent_flat_map<starpu_key_t, *task_t>;
+        using flat_map_t = boost::unordered::concurrent_flat_map<starpu_key_t, task_t*>;
 
         public:
         
@@ -44,7 +44,7 @@ namespace ttg_starpu {
         //Emplace an item if the key is not present and apply F1 to it, otherwise visit the item and apply F2 to it.
         template <typename KeyT, typename F1, typename F2>
         bool starpu_hash_table_try_emplace_and_visit(KeyT key, F1 &&func_new, F2 &&func_visit){
-            return this->try_emplace_and_visit(key, func_new(key) , func_visit);
+            return this->try_emplace_and_visit(key, [&](){ return func_new(key); }, [&](auto& item){ func_visit(item.second); });
         }
 
         // Remove an item if the key is present and func returns true on it.

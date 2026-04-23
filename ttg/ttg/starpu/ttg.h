@@ -1887,7 +1887,7 @@ namespace ttg_starpu {
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
           return create_new_task(key);
-        }, [&]{
+        }, [&](auto& item){
           if(!reducer && numins == (item.in_data_count + 1)) {
             to_remove = true;
           }
