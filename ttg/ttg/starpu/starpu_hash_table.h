@@ -13,10 +13,10 @@ namespace ttg_starpu {
 
 
     template <typename TT>
-    class starpu_hash_table : public boost::unordered::concurrent_flat_map<starpu_key_t, detail::starpu_ttg_task_t<TT>> {
+    class starpu_hash_table : public boost::unordered::concurrent_flat_map<starpu_key_t, *detail::starpu_ttg_task_t<TT>> {
         private:
         using task_t = detail::starpu_ttg_task_t<TT>;
-        using flat_map_t = boost::unordered::concurrent_flat_map<starpu_key_t, task_t>;
+        using flat_map_t = boost::unordered::concurrent_flat_map<starpu_key_t, *task_t>;
 
         public:
         
@@ -34,23 +34,28 @@ namespace ttg_starpu {
         
         //Emplace an item if the key is not present, otherwise visit the item and apply func to it.
         template <typename KeyT, typename F>
-        bool starpu_hash_table_emplace_or_visit(KeyT key, F func, task_t&& new_task){
-            return this->emplace_or_visit(key, std::move(new_task), [&](typename flat_map_t::value_type &item){
+        bool starpu_hash_table_emplace_or_visit(KeyT key, F &&func, task_t*&& new_task){
+            return this->emplace_or_visit(key, new_task, [&](auto& item){
                 func(item.second);
                 return true;
             });
         }
 
+        //Emplace an item if the key is not present and apply F1 to it, otherwise visit the item and apply F2 to it.
+        template <typename KeyT, typename F1, typename F2>
+        bool starpu_hash_table_try_emplace_and_visit(KeyT key, F1 &&func_new, F2 &&func_visit){
+            return this->try_emplace_and_visit(key, func_new(key) , func_visit);
+        }
 
         // Remove an item if the key is present and func returns true on it.
         // Returns deleted item pointer.
-        //TODO : Need to delete task later (free memory)
+        //TODO : Need to delete task later
         template <typename starpu_key_t, typename F, typename... Args>
-        std::unique_ptr<task_t> starpu_hash_table_remove(starpu_key_t key,F func, Args&&... args){
-            std::unique_ptr<task_t> task = nullptr;
-            this->erase_if(key, [&](auto& x){
-                if(func(x.second,std::forward<Args>(args)...)){
-                    task = std::make_unique<task_t>(std::move(x.second));
+        task_t* starpu_hash_table_remove(starpu_key_t key,F &&func, Args&&... args){
+            task_t* task = nullptr;
+            this->erase_if(key, [&](auto& item){
+                if(func(item.second,std::forward<Args>(args)...)){
+                    task = item.second;
                     return true;
                 }                
                 return false;

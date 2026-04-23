@@ -1717,7 +1717,7 @@ namespace ttg_starpu {
 
       for (int i = 0; i < static_stream_goal.size(); ++i) {
         //TODO : uncommennt when task constructor is implemented.
-        //newtask->streams[i].goal = static_stream_goal[i];
+        newtask->streams[i].goal = static_stream_goal[i];
       }
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": creating task");
@@ -1774,7 +1774,7 @@ namespace ttg_starpu {
       auto &reducer = std::get<i>(input_reducers);
       bool release = false;
       bool remove_from_hash = true;
-
+      bool to_remove = false;
       bool get_pull_data = false;
       /* If we have only one input and no reducer on that input we can skip the hash table */
 
@@ -1878,43 +1878,41 @@ namespace ttg_starpu {
             release = true;
           }
         }
-        //TODO: Call release_task outside of callback_fn
-        // task->remove_from_hash = remove_from_hash;
-        // if (release) {
-        //   release_task(task, task_ring);
-        // }
-        /* if not pulling lazily, pull the data here */
-        if constexpr (!ttg::meta::is_void_v<keyT>) {
-          if (get_pull_data) {
-            invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
-          }
-        }
       };
 
 
       if (numins > 1 || reducer) {
         
-        this->tasks_table->starpu_hash_table_emplace_or_visit(hk, [&](task_t &item) {
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&]{
+          world_impl.increment_created();
+          get_pull_data = !is_lazy_pull();
+          return create_new_task(key);
+        }, [&]{
           if(!reducer && numins == (item.in_data_count + 1)) {
-            //TODO: May we use remove_from_hash or another boolean to call erase_if after
-            remove_from_hash = false;
-            callback_fn(&item);
+            to_remove = true;
           }
-        }, create_new_task(key));
-        //TODO: add this in create_new task or in new function that call create_new_task(look if we use create_new_task in other place without hash table)
-        //   world_impl.increment_created();
-        //   get_pull_data = !is_lazy_pull();
-        //   if( world_impl.dag_profiling() ) {
-        //   }
+          callback_fn(&item);
+        });
+        if(to_remove) {
+          task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
+          remove_from_hash = false;
+        }
       } else {
-        *task = create_new_task(key);
+        task = &create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
         callback_fn(task);
-        if( world_impl.dag_profiling() ) {
-        }
+        
       }
-      if( world_impl.dag_profiling() ) {
+      task->remove_from_hash = remove_from_hash;
+      if (release) {
+        release_task(task, task_ring);
+      }
+      /* if not pulling lazily, pull the data here */
+      if constexpr (!ttg::meta::is_void_v<keyT>) {
+        if (get_pull_data) {
+          invoke_pull_terminals(std::make_index_sequence<std::tuple_size_v<input_values_tuple_type>>{}, task->key, task);
+        }
       }
     }
 

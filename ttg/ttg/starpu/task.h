@@ -101,10 +101,6 @@ namespace ttg_starpu {
       int32_t data_count = 0;                //< number of data elements in the copies array
       ttg_data_copy_t **copies;              //< pointer to the fixed copies array of the derived task
       
-      /* Hash table item for task tracking */
-      // starpu_hash_table_item_t tt_ht_item = {};
-
-      
       struct stream_info_t {
         std::size_t goal;
         std::size_t size;
@@ -174,40 +170,6 @@ namespace ttg_starpu {
       {
         // TODO: Initialize StarPU task when scheduling
       }
-      starpu_ttg_task_base_t(starpu_ttg_task_base_t&& other) noexcept
-        : starpu_task(other.starpu_task)
-        , in_data_count(other.in_data_count)
-        , data_count(other.data_count)
-        , copies(other.copies)
-        , release_task_cb(other.release_task_cb)
-        , dev_ptr(other.dev_ptr)
-        , remove_from_hash(other.remove_from_hash)
-        , dummy(other.dummy)
-        , defer_writer(other.defer_writer)
-        , data_flags(other.data_flags) {
-      
-      }
-
-      starpu_ttg_task_base_t& operator=(starpu_ttg_task_base_t&& other) noexcept {
-        if (this != &other) {
-          starpu_task = other.starpu_task;
-          in_data_count = other.in_data_count;
-          data_count = other.data_count;
-          copies = other.copies;
-          release_task_cb = other.release_task_cb;
-          dev_ptr = other.dev_ptr;
-          remove_from_hash = other.remove_from_hash;
-          dummy = other.dummy;
-          defer_writer = other.defer_writer;
-          data_flags = other.data_flags;
-
-          other.starpu_task = nullptr;
-          other.copies = nullptr;
-          other.dev_ptr = nullptr; 
-          other.release_task_cb = nullptr;
-        }
-        return *this;
-      }
 
     public:
       void set_dummy(bool d) { dummy = d; }
@@ -223,8 +185,6 @@ namespace ttg_starpu {
       static constexpr size_t num_streams = TT::numins;
       std::array<stream_info_t, num_streams> streams;
       ttg_data_copy_t *copies[num_streams] = { nullptr };
-
-      starpu_ttg_task_t() = default;
 
       
       starpu_ttg_task_t( TT *tt_ptr)
@@ -243,38 +203,6 @@ namespace ttg_starpu {
         this->dev_ptr = this->dev_state.dev_ptr();
       }
 
-      starpu_ttg_task_t(starpu_ttg_task_t&& other) noexcept
-        : starpu_ttg_task_base_t(std::move(other))
-        , tt(other.tt)
-        , key(std::move(other.key))
-        , dev_state(std::move(other.dev_state))
-      {
-        for (std::size_t i = 0; i < num_streams; ++i) {
-          streams[i].goal = other.streams[i].goal;
-          streams[i].size = other.streams[i].size;
-          streams[i].reduce_count.store(other.streams[i].reduce_count.load());
-        }
-        std::copy(std::begin(other.copies), std::end(other.copies), std::begin(copies));
-        this->starpu_ttg_task_base_t::copies = this->copies;
-      }
-
-
-      starpu_ttg_task_t& operator=(starpu_ttg_task_t&& other) noexcept {
-        if (this != &other) {
-          this->starpu_ttg_task_base_t::operator=(std::move(other));
-          tt = other.tt;
-          key = std::move(other.key);
-          for (std::size_t i = 0; i < num_streams; ++i) {
-            streams[i].goal = other.streams[i].goal;
-            streams[i].size = other.streams[i].size;
-            streams[i].reduce_count.store(other.streams[i].reduce_count.load());
-          }
-          dev_state = std::move(other.dev_state);
-          std::copy(std::begin(other.copies), std::end(other.copies), std::begin(copies));
-          this->starpu_ttg_task_base_t::copies = this->copies;
-        }
-        return *this;
-      }
 
       static void release_task(starpu_ttg_task_base_t* task_base) {
         starpu_ttg_task_t *task = static_cast<starpu_ttg_task_t*>(task_base);
@@ -333,36 +261,7 @@ namespace ttg_starpu {
         callback_fn(this);
       }
 
-      starpu_ttg_task_t(starpu_ttg_task_t&& other) noexcept
-        : starpu_ttg_task_base_t(std::move(other))
-        , tt(other.tt)
-        , dev_state(std::move(other.dev_state))
-      {
-        this->starpu_ttg_task_base_t::copies = this->copies;
-        for (std::size_t i = 0; i < num_streams; ++i) {
-          streams[i].goal = other.streams[i].goal;
-          streams[i].size = other.streams[i].size;
-          streams[i].reduce_count.store(other.streams[i].reduce_count.load());
-        }
-        std::copy(std::begin(other.copies), std::end(other.copies), std::begin(copies));
-        this->starpu_ttg_task_base_t::copies = this->copies;
-      }
-
-      starpu_ttg_task_t& operator=(starpu_ttg_task_t&& other) noexcept {
-        if (this != &other) {
-          starpu_ttg_task_base_t::operator=(std::move(other));
-          tt = other.tt;
-          for (std::size_t i = 0; i < num_streams; ++i) {
-            streams[i].goal = other.streams[i].goal;
-            streams[i].size = other.streams[i].size;
-            streams[i].reduce_count.store(other.streams[i].reduce_count.load());
-          }
-          dev_state = std::move(other.dev_state);
-          std::copy(std::begin(other.copies), std::end(other.copies), std::begin(copies));
-          this->starpu_ttg_task_base_t::copies = this->copies;
-        }
-        return *this;
-      }
+      
 
       static void release_task(starpu_ttg_task_base_t* task_base) {
         starpu_ttg_task_t *task = static_cast<starpu_ttg_task_t*>(task_base);
