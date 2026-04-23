@@ -1701,22 +1701,21 @@ namespace ttg_starpu {
     }
 
     template <typename Key>
-    task_t create_new_task(const Key &key) {
+    task_t* create_new_task(const Key &key) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
       int32_t priority = 0;
-      task_t newtask = [&]() -> task_t {
+      task_t* newtask = [&]() -> task_t* {
         if constexpr (!keyT_is_Void) {
           //apply priomap with key
-          return task_t(key, priority, this);
+          return new task_t(key, priority, this);
         } else {
           //apply priomap without key
-          return task_t(priority, this);
+          return new task_t(priority, this);
         }
       }();
 
       for (int i = 0; i < static_stream_goal.size(); ++i) {
-        //TODO : uncommennt when task constructor is implemented.
         newtask->streams[i].goal = static_stream_goal[i];
       }
 
@@ -1883,12 +1882,12 @@ namespace ttg_starpu {
 
       if (numins > 1 || reducer) {
         
-        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&]{
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](auto& key){
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
           return create_new_task(key);
         }, [&](auto& item){
-          if(!reducer && numins == (item.in_data_count + 1)) {
+          if(!reducer && numins == (item->in_data_count + 1)) {
             to_remove = true;
           }
           callback_fn(&item);
@@ -1898,7 +1897,7 @@ namespace ttg_starpu {
           remove_from_hash = false;
         }
       } else {
-        task = &create_new_task(key);
+        task = create_new_task(key);
         world_impl.increment_created();
         remove_from_hash = false;
         callback_fn(task);
