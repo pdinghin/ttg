@@ -221,7 +221,7 @@ SanitizeLinalgLibraries()
 include(FindOrFetchStarPu)
 if (TARGET MyProject::StarPU)
   include(FindOrFetchBoost)
-  target_link_libraries(MyProject::StarPU PRIVATE Boost::headers)
+  target_link_libraries(MyProject::StarPU INTERFACE Boost::headers)
   message(STATUS "STARPU_FOUND=1")
 endif(TARGET MyProject::StarPU)
 # PaRSEC
