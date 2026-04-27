@@ -106,32 +106,32 @@ else()
 
     set(Boost_REQUIRED_COMPONENTS ${Boost_ALL_COMPONENTS})
 
+
     if (NOT TARGET Boost_headers)
-        message(STATUS "Boost 1.87: Fetching headers and setting up interface targets...")
-
-        FetchContent_Declare(
-            Boost
-            URL "https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz"
-            URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
-            DOWNLOAD_EXTRACT_TIMESTAMP ON
-        )
-
-        FetchContent_GetProperties(Boost)
-        if(NOT boost_POPULATED)
-            FetchContent_Populate(Boost)
-        endif()
-
+        message(STATUS "Boost 1.87: Setting up exportable interface targets...")
+        
         add_library(Boost_headers INTERFACE)
         add_library(Boost::headers ALIAS Boost_headers)
         target_include_directories(Boost_headers INTERFACE "${boost_SOURCE_DIR}")
         target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
 
+        set(EXPORT_NAMES "ttg" "tiledarray" "btas")
+
+        foreach(exp ${EXPORT_NAMES})
+            install(TARGETS Boost_headers EXPORT ${exp})
+        endforeach()
+
         foreach(comp IN LISTS Boost_ALL_COMPONENTS)
             component_to_targets(comp tgt)
             if(NOT TARGET Boost::${tgt})
-                add_library(boost_${tgt}_iface INTERFACE)
-                add_library(Boost::${tgt} ALIAS boost_${tgt}_iface)
-                target_link_libraries(boost_${tgt}_iface INTERFACE Boost_headers)
+                set(iface_name "boost_${tgt}_iface")
+                add_library(${iface_name} INTERFACE)
+                add_library(Boost::${tgt} ALIAS ${iface_name})
+                target_link_libraries(${iface_name} INTERFACE Boost_headers)
+                
+                foreach(exp ${EXPORT_NAMES})
+                    install(TARGETS ${iface_name} EXPORT ${exp})
+                endforeach()
             endif()
         endforeach()
         
