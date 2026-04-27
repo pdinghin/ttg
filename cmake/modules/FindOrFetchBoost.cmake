@@ -88,7 +88,7 @@ else()
         FetchContent_Declare(
             Boost
             URL https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz
-            URL_HASH SHA256=af91168074693a7431e13337e6d97c050a4f5f590637f90400030221319c5c2d
+            URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
         )
 
         FetchContent_MakeAvailable(Boost)
