@@ -1,18 +1,18 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # update the Boost version that we can tolerate
-if(USE_PARSEC)
-    if (NOT DEFINED Boost_OLDEST_BOOST_VERSION)
-        set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
-    else()
-        if (${Boost_OLDEST_BOOST_VERSION} VERSION_LESS ${TTG_OLDEST_BOOST_VERSION})
-            if (DEFINED CACHE{Boost_OLDEST_BOOST_VERSION})
-                set(Boost_OLDEST_BOOST_VERSION "${TTG_OLDEST_BOOST_VERSION}" CACHE STRING "Oldest Boost version to use" FORCE)
-            else()
-                set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
-            endif()
+
+if (NOT DEFINED Boost_OLDEST_BOOST_VERSION)
+    set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
+else()
+    if (${Boost_OLDEST_BOOST_VERSION} VERSION_LESS ${TTG_OLDEST_BOOST_VERSION})
+        if (DEFINED CACHE{Boost_OLDEST_BOOST_VERSION})
+            set(Boost_OLDEST_BOOST_VERSION "${TTG_OLDEST_BOOST_VERSION}" CACHE STRING "Oldest Boost version to use" FORCE)
+        else()
+            set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
         endif()
     endif()
-
+endif()
+if(USE_PARSEC)
     # Boost can be discovered by every (sub)package but only the top package can *build* it ...
     # in either case must declare the components used by TTG
     set(required_components
@@ -74,18 +74,17 @@ else()
     set(BOOST_REQUIRED_VERSION "1.87.0")
 
     if (NOT TARGET Boost::headers)
-        find_package(Boost ${BOOST_REQUIRED_VERSION} QUIET COMPONENTS headers)
-        if (Target Boost::headers)
-            message(STATUS "Found Boost: ${Boost_VERSION}")
+        set(_boost_needed_components "random" "serialization" "system" "iostreams")
+        
+        find_package(Boost ${BOOST_REQUIRED_VERSION} QUIET COMPONENTS ${_boost_needed_components})
+        
+        if (TARGET Boost::headers)
+            message(STATUS "Found Boost system-wide: ${Boost_VERSION}")
         endif ()
     endif ()
-
     if (NOT TARGET Boost::headers)
-        message(STATUS "Boost ${BOOST_REQUIRED_VERSION} not found. Fetching from official archives...")
+        message(STATUS "Boost ${BOOST_REQUIRED_VERSION} not found or incomplete. Downloading official archive...")
 
-
-        string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
-        
         FetchContent_Declare(
             Boost
             URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_REQUIRED_VERSION}/boost-${BOOST_REQUIRED_VERSION}.tar.gz
@@ -94,25 +93,31 @@ else()
 
         FetchContent_MakeAvailable(Boost)
 
-        FetchContent_GetProperties(Boost
-            SOURCE_DIR BOOST_SOURCE_DIR
-        )
+        FetchContent_GetProperties(Boost SOURCE_DIR BOOST_SOURCE_DIR)
 
         if (NOT TARGET Boost::headers)
             add_library(Boost_headers INTERFACE)
             add_library(Boost::headers ALIAS Boost_headers)
             
             target_include_directories(Boost_headers INTERFACE 
-            "$<BUILD_INTERFACE:${BOOST_SOURCE_DIR}>"
+                "$<BUILD_INTERFACE:${BOOST_SOURCE_DIR}>"
             )
+            set(_boost_fake_components "random" "serialization" "system" "iostreams" "filesystem")
+            
+            foreach(_comp IN LISTS _boost_fake_components)
+                if (NOT TARGET Boost::${_comp})
+                    add_library(Boost_${_comp} INTERFACE)
+                    add_library(Boost::${_comp} ALIAS Boost_${_comp})
+                    target_link_libraries(Boost_${_comp} INTERFACE Boost::headers)
+                endif()
+            endforeach()
         endif()
-
     endif()
 
     if (NOT TARGET Boost::headers)
         message(FATAL_ERROR "FindOrFetchBoost could not make Boost::headers target available")
     else()
-
         target_compile_definitions(Boost::headers INTERFACE BOOST_ALL_NO_LIB)
+        target_compile_definitions(Boost::headers INTERFACE BOOST_SYSTEM_NO_DEPRECATED)
     endif()
 endif()
