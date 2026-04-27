@@ -87,12 +87,12 @@ else()
 
         FetchContent_Declare(
             Boost
-            URL https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz
+            URL "https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz"
             URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
         )
 
         FetchContent_MakeAvailable(Boost)
-
         FetchContent_GetProperties(Boost SOURCE_DIR BOOST_SOURCE_DIR)
 
         if (NOT TARGET Boost::headers)
@@ -102,22 +102,22 @@ else()
             target_include_directories(Boost_headers INTERFACE 
                 "$<BUILD_INTERFACE:${BOOST_SOURCE_DIR}>"
             )
+
             set(_boost_fake_components "random" "serialization" "system" "iostreams" "filesystem")
-            
             foreach(_comp IN LISTS _boost_fake_components)
                 if (NOT TARGET Boost::${_comp})
                     add_library(Boost_${_comp} INTERFACE)
                     add_library(Boost::${_comp} ALIAS Boost_${_comp})
-                    target_link_libraries(Boost_${_comp} INTERFACE Boost::headers)
+                    target_link_libraries(Boost_${_comp} INTERFACE Boost_headers)
                 endif()
             endforeach()
         endif()
     endif()
 
-    if (NOT TARGET Boost::headers)
-        message(FATAL_ERROR "FindOrFetchBoost could not make Boost::headers target available")
+    if (NOT TARGET Boost_headers)
+        message(FATAL_ERROR "FindOrFetchBoost could not find the real target Boost_headers")
     else()
-        target_compile_definitions(Boost::headers INTERFACE BOOST_ALL_NO_LIB)
-        target_compile_definitions(Boost::headers INTERFACE BOOST_SYSTEM_NO_DEPRECATED)
+        target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
+        target_compile_definitions(Boost_headers INTERFACE BOOST_SYSTEM_NO_DEPRECATED)
     endif()
 endif()
