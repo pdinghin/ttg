@@ -66,8 +66,53 @@ else()
 endif()
 
 # Bring ValeevGroup cmake toolkit, if not yet available
-include(FetchVGCMakeKit)
-include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
+if(USE_PARSEC)
+    include(FetchVGCMakeKit)
+    include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
+else()
+    include(FetchContent)
+
+    set(BOOST_VERSION "1.87.0")
+    set(BOOST_TAG "boost-${BOOST_VERSION}")
+
+    message(STATUS "Fetching Boost ${BOOST_VERSION}...")
+
+    FetchContent_Declare(
+        Boost
+        GIT_REPOSITORY https://github.com/boostorg/boost.git
+        GIT_TAG        ${BOOST_TAG}
+        GIT_SHALLOW    TRUE
+        GIT_PROGRESS   TRUE
+    )
+
+    FetchContent_GetProperties(Boost)
+
+    if(NOT boost_POPULATED)
+        FetchContent_Populate(Boost)
+        
+        if(NOT TARGET Boost::headers)
+            add_library(Boost_headers INTERFACE)
+            add_library(Boost::headers ALIAS Boost_headers)
+            
+            target_include_directories(Boost_headers INTERFACE 
+                "$<BUILD_INTERFACE:${boost_SOURCE_DIR}>"
+            )
+            
+            set(_boost_libs_root "${boost_SOURCE_DIR}/libs")
+            
+            # On utilise une fonction de recherche pour ne prendre QUE les dossiers 'include' 
+            # directs des bibliothèques, ce qui est moins lourd qu'un GLOB récursif profond.
+            file(GLOB _boost_includes RELATIVE ${boost_SOURCE_DIR} "${boost_SOURCE_DIR}/libs/*/include")
+            
+            foreach(_inc IN LISTS _boost_includes)
+                target_include_directories(Boost_headers INTERFACE 
+                    "$<BUILD_INTERFACE:${boost_SOURCE_DIR}/${_inc}>")
+            endforeach()
+        endif()
+    endif()
+
+    set(Boost_FOUND TRUE)
+endif()
 if (Boost_BUILT_FROM_SOURCE)
     set(TTG_BUILT_BOOST_FROM_SOURCE 1)
 endif()
