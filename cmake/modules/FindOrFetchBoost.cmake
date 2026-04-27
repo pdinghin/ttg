@@ -72,7 +72,7 @@ else()
     include(FetchContent)
 
     set(BOOST_REQUIRED_VERSION "1.87.0")
-
+    string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
     if (NOT TARGET Boost::headers)
         set(_boost_needed_components "random" "serialization" "system" "iostreams")
         
@@ -87,7 +87,7 @@ else()
 
         FetchContent_Declare(
             Boost
-            URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_REQUIRED_VERSION}/boost-${BOOST_REQUIRED_VERSION}.tar.gz
+            URL https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz
             URL_HASH SHA256=af91168074693a7431e13337e6d97c050a4f5f590637f90400030221319c5c2d
         )
 
