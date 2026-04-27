@@ -68,13 +68,18 @@ if(USE_PARSEC)
     include(FetchVGCMakeKit)
     include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
 else()
+
+    macro(boost_install)
+    endmacro()
+    macro(export)
+    endmacro()
+
     include(FetchContent)
 
     set(Boost_ALL_COMPONENTS_NONMODULAR
         headers chrono context graph filesystem iostreams locale log math_tr1 
         math_c99 mpi program_options python random regex serialization thread timer wave
     )
-
     set(Boost_ALL_COMPONENTS
         algorithm align any atomic array assert bind chrono circular_buffer compute 
         concept_check config container container_hash conversion core date_time 
@@ -87,8 +92,7 @@ else()
         throw_exception tokenizer tti tuple typeof type_index type_traits 
         unordered utility uuid variant variant2 winapi
     )
-    macro(boost_install)
-    endmacro()
+
     macro(component_to_targets _comp _targets)
         if ("${${_comp}}" STREQUAL "test")
             set(${_targets} unit_test_framework)
@@ -97,26 +101,13 @@ else()
         endif()
     endmacro()
 
-    macro(intersection _out _in1 _in2)
-        set(${_out})
-        foreach(x IN LISTS ${_in1})
-            if(x IN_LIST ${_in2})
-                list(APPEND ${_out} ${x})
-            endif()
-        endforeach()
-    endmacro()
-
     set(BOOST_REQUIRED_VERSION "1.87.0")
     string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
 
-    if(NOT Boost_REQUIRED_COMPONENTS)
-        set(Boost_REQUIRED_COMPONENTS headers unordered random serialization system filesystem iostreams)
-    endif()
+    set(Boost_REQUIRED_COMPONENTS ${Boost_ALL_COMPONENTS})
 
-    find_package(Boost ${BOOST_REQUIRED_VERSION} QUIET COMPONENTS ${Boost_REQUIRED_COMPONENTS})
-
-    if (NOT Boost_FOUND AND NOT TARGET Boost::headers)
-        message(STATUS "Boost ${BOOST_REQUIRED_VERSION} not found. Fetching via FetchContent...")
+    if (NOT TARGET Boost_headers)
+        message(STATUS "Boost 1.87: Fetching headers and setting up interface targets...")
 
         FetchContent_Declare(
             Boost
@@ -125,41 +116,31 @@ else()
             DOWNLOAD_EXTRACT_TIMESTAMP ON
         )
 
-        set(BOOST_INCLUDE_LIBRARIES ${Boost_REQUIRED_COMPONENTS} CACHE STRING "" FORCE)
-        set(BOOST_INSTALL OFF CACHE BOOL "" FORCE)
-
-        FetchContent_MakeAvailable(Boost)
-        FetchContent_GetProperties(Boost SOURCE_DIR boost_SOURCE_DIR)
-
-        foreach(lib IN LISTS Boost_REQUIRED_COMPONENTS)
-            component_to_targets(lib __lib_targets)
-            foreach(tgt IN LISTS __lib_targets)
-                if (NOT TARGET Boost::${tgt})
-                    if (TARGET boost_${tgt})
-                        add_library(Boost::${tgt} ALIAS boost_${tgt})
-                    else()
-                        add_library(Boost_${tgt}_interface INTERFACE)
-                        add_library(Boost::${tgt} ALIAS Boost_${tgt}_interface)
-                        target_include_directories(Boost_${tgt}_interface INTERFACE "${boost_SOURCE_DIR}")
-                    endif()
-                endif()
-            endforeach()
-        endforeach()
-    endif()
-
-    if (TARGET Boost_headers)
-        target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
-        message(STATUS "FindOrFetchBoost: Boost ${BOOST_REQUIRED_VERSION} is ready (Header-only mode).")
-
-    elseif(TARGET Boost::headers)
-        get_target_property(_is_alias Boost::headers ALIAS_FOR)
-        
-        if(_is_alias)
-            target_compile_definitions(${_is_alias} INTERFACE BOOST_ALL_NO_LIB)
-        else()
-            set_target_properties(Boost::headers PROPERTIES INTERFACE_COMPILE_DEFINITIONS "BOOST_ALL_NO_LIB")
+        FetchContent_GetProperties(Boost)
+        if(NOT boost_POPULATED)
+            FetchContent_Populate(Boost)
         endif()
+
+        add_library(Boost_headers INTERFACE)
+        add_library(Boost::headers ALIAS Boost_headers)
+        target_include_directories(Boost_headers INTERFACE "${boost_SOURCE_DIR}")
+        target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
+
+        foreach(comp IN LISTS Boost_ALL_COMPONENTS)
+            component_to_targets(comp tgt)
+            if(NOT TARGET Boost::${tgt})
+                add_library(boost_${tgt}_iface INTERFACE)
+                add_library(Boost::${tgt} ALIAS boost_${tgt}_iface)
+                target_link_libraries(boost_${tgt}_iface INTERFACE Boost_headers)
+            endif()
+        endforeach()
+        
+        set(Boost_FOUND TRUE CACHE BOOL "" FORCE)
     endif()
+
+
+    cmake_language(EVAL CODE "macro(export)\n _export(\${ARGN})\n endmacro()")
+
 endif()
 
 
