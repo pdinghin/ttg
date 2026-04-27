@@ -87,7 +87,8 @@ else()
         throw_exception tokenizer tti tuple typeof type_index type_traits 
         unordered utility uuid variant variant2 winapi
     )
-
+    macro(boost_install)
+    endmacro()
     macro(component_to_targets _comp _targets)
         if ("${${_comp}}" STREQUAL "test")
             set(${_targets} unit_test_framework)
@@ -146,16 +147,18 @@ else()
         endforeach()
     endif()
 
-    if (TARGET Boost::headers)
-        if (NOT TARGET Boost_headers)
-            add_library(Boost_headers INTERFACE)
-            target_link_libraries(Boost_headers INTERFACE Boost::headers)
-        endif()
+    if (TARGET Boost_headers)
+        target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
+        message(STATUS "FindOrFetchBoost: Boost ${BOOST_REQUIRED_VERSION} is ready (Header-only mode).")
 
-        target_compile_definitions(Boost::headers INTERFACE BOOST_ALL_NO_LIB)
-        message(STATUS "FindOrFetchBoost: Boost ${BOOST_REQUIRED_VERSION} is ready.")
-    else()
-        message(FATAL_ERROR "FindOrFetchBoost: Could not find or download Boost.")
+    elseif(TARGET Boost::headers)
+        get_target_property(_is_alias Boost::headers ALIAS_FOR)
+        
+        if(_is_alias)
+            target_compile_definitions(${_is_alias} INTERFACE BOOST_ALL_NO_LIB)
+        else()
+            set_target_properties(Boost::headers PROPERTIES INTERFACE_COMPILE_DEFINITIONS "BOOST_ALL_NO_LIB")
+        endif()
     endif()
 endif()
 
