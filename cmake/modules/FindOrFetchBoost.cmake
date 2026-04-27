@@ -101,11 +101,12 @@ else()
         endif()
     endmacro()
 
-    set(BOOST_REQUIRED_VERSION "1.87.0")
-    string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
-
     set(Boost_REQUIRED_COMPONENTS ${Boost_ALL_COMPONENTS})
 
+
+
+    set(BOOST_REQUIRED_VERSION "1.87.0")
+    string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
 
     if (NOT TARGET Boost_headers)
         message(STATUS "Boost 1.87: Fetching archive...")
@@ -114,19 +115,19 @@ else()
 
         FetchContent_Declare(
             Boost
-            URL "https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz"
-            URL_HASH SHA256=${BOOST_ARCHIVE_HASH}
+            URL "https://archives.boost.io/release/1.87.0/source/boost_1_87_0.tar.gz"
+            URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
             DOWNLOAD_EXTRACT_TIMESTAMP ON
         )
 
         FetchContent_MakeAvailable(Boost)
-        
         FetchContent_GetProperties(Boost SOURCE_DIR boost_SOURCE_DIR)
 
         if(NOT TARGET Boost_headers)
             add_library(Boost_headers INTERFACE)
             add_library(Boost::headers ALIAS Boost_headers)
         endif()
+
 
         target_include_directories(Boost_headers INTERFACE "${boost_SOURCE_DIR}")
         
