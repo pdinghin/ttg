@@ -134,6 +134,9 @@ else()
                 
                 target_link_libraries(${iface_name} INTERFACE Boost_headers)
                 
+                foreach(exp ${EXPORT_NAMES})
+                    install(TARGETS ${iface_name} EXPORT ${exp})
+                endforeach()
             endif()
         endforeach()
         
