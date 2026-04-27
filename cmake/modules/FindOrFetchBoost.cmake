@@ -129,12 +129,12 @@ else()
         endif()
 
 
-        target_include_directories(Boost_headers INTERFACE "${boost_SOURCE_DIR}")
-        
+        target_include_directories(Boost_headers INTERFACE "$<BUILD_INTERFACE:${boost_SOURCE_DIR}>")
+    
         file(GLOB _boost_libs_dirs "${boost_SOURCE_DIR}/libs/*")
         foreach(_lib_dir ${_boost_libs_dirs})
             if(IS_DIRECTORY "${_lib_dir}/include")
-                target_include_directories(Boost_headers INTERFACE "${_lib_dir}/include")
+                target_include_directories(Boost_headers INTERFACE "$<BUILD_INTERFACE:${_lib_dir}/include>")
             endif()
         endforeach()
 
