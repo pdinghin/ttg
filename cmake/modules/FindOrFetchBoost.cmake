@@ -90,7 +90,7 @@ else()
         phoenix pool predef preprocessor property_tree proto random range ratio 
         regex serialization smart_ptr spirit static_assert system test thread 
         throw_exception tokenizer tti tuple typeof type_index type_traits 
-        unordered utility uuid variant variant2 winapi
+        callable_traits unordered utility uuid variant variant2 winapi
     )
 
     macro(component_to_targets _comp _targets)
@@ -127,11 +127,13 @@ else()
                 set(iface_name "boost_${tgt}_iface")
                 add_library(${iface_name} INTERFACE)
                 add_library(Boost::${tgt} ALIAS ${iface_name})
+                
+                if(EXISTS "${boost_SOURCE_DIR}/libs/${tgt}/include")
+                    target_include_directories(${iface_name} INTERFACE "${boost_SOURCE_DIR}/libs/${tgt}/include")
+                endif()
+                
                 target_link_libraries(${iface_name} INTERFACE Boost_headers)
                 
-                foreach(exp ${EXPORT_NAMES})
-                    install(TARGETS ${iface_name} EXPORT ${exp})
-                endforeach()
             endif()
         endforeach()
         
