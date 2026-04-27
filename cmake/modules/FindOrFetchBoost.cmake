@@ -106,36 +106,51 @@ else()
 
     set(Boost_REQUIRED_COMPONENTS ${Boost_ALL_COMPONENTS})
 
-
     if (NOT TARGET Boost_headers)
-        message(STATUS "Boost 1.87: Setting up exportable interface targets...")
-        
+        message(STATUS "Boost 1.87: Extracting and mapping all library headers...")
+
+        FetchContent_Declare(
+            Boost
+            URL "https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz"
+            URL_HASH SHA256=${BOOST_ARCHIVE_HASH}
+            DOWNLOAD_EXTRACT_TIMESTAMP ON
+        )
+
+        FetchContent_GetProperties(Boost)
+        if(NOT boost_POPULATED)
+            FetchContent_Populate(Boost)
+        endif()
+
         add_library(Boost_headers INTERFACE)
         add_library(Boost::headers ALIAS Boost_headers)
+        
         target_include_directories(Boost_headers INTERFACE "${boost_SOURCE_DIR}")
+
+        file(GLOB _boost_libs_dirs "${boost_SOURCE_DIR}/libs/*")
+        foreach(_lib_dir ${_boost_libs_dirs})
+            if(IS_DIRECTORY "${_lib_dir}/include")
+                target_include_directories(Boost_headers INTERFACE "${_lib_dir}/include")
+            endif()
+        endforeach()
+
         target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
 
         set(EXPORT_NAMES "ttg" "tiledarray" "btas")
-
         foreach(exp ${EXPORT_NAMES})
-            install(TARGETS Boost_headers EXPORT ${exp})
+            if(NOT TARGET install_Boost_headers_${exp}) 
+                install(TARGETS Boost_headers EXPORT ${exp})
+            endif()
         endforeach()
 
         foreach(comp IN LISTS Boost_ALL_COMPONENTS)
             component_to_targets(comp tgt)
             if(NOT TARGET Boost::${tgt})
-                set(iface_name "boost_${tgt}_iface")
-                add_library(${iface_name} INTERFACE)
-                add_library(Boost::${tgt} ALIAS ${iface_name})
-                
-                if(EXISTS "${boost_SOURCE_DIR}/libs/${tgt}/include")
-                    target_include_directories(${iface_name} INTERFACE "${boost_SOURCE_DIR}/libs/${tgt}/include")
-                endif()
-                
-                target_link_libraries(${iface_name} INTERFACE Boost_headers)
+                add_library(boost_${tgt}_iface INTERFACE)
+                add_library(Boost::${tgt} ALIAS boost_${tgt}_iface)
+                target_link_libraries(boost_${tgt}_iface INTERFACE Boost_headers)
                 
                 foreach(exp ${EXPORT_NAMES})
-                    install(TARGETS ${iface_name} EXPORT ${exp})
+                    install(TARGETS boost_${tgt}_iface EXPORT ${exp})
                 endforeach()
             endif()
         endforeach()
