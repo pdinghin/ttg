@@ -65,68 +65,54 @@ if(USE_PARSEC)
     else()
         set(Boost_OPTIONAL_COMPONENTS "${optional_components}" CACHE STRING "Optional components of Boost to discovered or built")
     endif()
-endif()
 # Bring ValeevGroup cmake toolkit, if not yet available
-if(USE_PARSEC)
     include(FetchVGCMakeKit)
     include(${vg_cmake_kit_SOURCE_DIR}/modules/FindOrFetchBoost.cmake)
 else()
     include(FetchContent)
 
-    set(BOOST_VERSION "1.87.0")
-    set(BOOST_TAG "boost-${BOOST_VERSION}")
+    set(BOOST_REQUIRED_VERSION "1.87.0")
 
-    message(STATUS "Fetching Boost ${BOOST_VERSION}...")
+    if (NOT TARGET Boost::headers)
+        find_package(Boost ${BOOST_REQUIRED_VERSION} QUIET COMPONENTS headers)
+        if (Target Boost::headers)
+            message(STATUS "Found Boost: ${Boost_VERSION}")
+        endif ()
+    endif ()
 
-    FetchContent_Declare(
-        Boost
-        GIT_REPOSITORY https://github.com/boostorg/boost.git
-        GIT_TAG        ${BOOST_TAG}
-        GIT_SHALLOW    TRUE
-        GIT_PROGRESS   TRUE
-    )
+    if (NOT TARGET Boost::headers)
+        message(STATUS "Boost ${BOOST_REQUIRED_VERSION} not found. Fetching from official archives...")
 
-    FetchContent_GetProperties(Boost)
 
-    if(NOT boost_POPULATED)
-        FetchContent_Populate(Boost)
+        string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
         
-        if(NOT TARGET Boost::headers)
+        FetchContent_Declare(
+            Boost
+            URL https://github.com/boostorg/boost/releases/download/boost-${BOOST_REQUIRED_VERSION}/boost-${BOOST_REQUIRED_VERSION}.tar.gz
+            URL_HASH SHA256=af91168074693a7431e13337e6d97c050a4f5f590637f90400030221319c5c2d
+        )
+
+        FetchContent_MakeAvailable(Boost)
+
+        FetchContent_GetProperties(Boost
+            SOURCE_DIR BOOST_SOURCE_DIR
+        )
+
+        if (NOT TARGET Boost::headers)
             add_library(Boost_headers INTERFACE)
             add_library(Boost::headers ALIAS Boost_headers)
             
             target_include_directories(Boost_headers INTERFACE 
-                "$<BUILD_INTERFACE:${boost_SOURCE_DIR}>"
+            "$<BUILD_INTERFACE:${BOOST_SOURCE_DIR}>"
             )
-            
-            set(_boost_libs_root "${boost_SOURCE_DIR}/libs")
-            
-            file(GLOB _boost_includes RELATIVE ${boost_SOURCE_DIR} "${boost_SOURCE_DIR}/libs/*/include")
-            
-            foreach(_inc IN LISTS _boost_includes)
-                target_include_directories(Boost_headers INTERFACE 
-                    "$<BUILD_INTERFACE:${boost_SOURCE_DIR}/${_inc}>")
-            endforeach()
         endif()
+
     endif()
 
-    set(Boost_FOUND TRUE)
-endif()
-if (Boost_BUILT_FROM_SOURCE)
-    set(TTG_BUILT_BOOST_FROM_SOURCE 1)
-endif()
+    if (NOT TARGET Boost::headers)
+        message(FATAL_ERROR "FindOrFetchBoost could not make Boost::headers target available")
+    else()
 
-if (TARGET Boost::headers)
-    set(TTG_HAS_BOOST 1)
-    file(GLOB _boost_module_includes "${boost_SOURCE_DIR}/libs/*/include")
-
-    get_target_property(_boost_headers_real_target Boost::headers ALIASED_TARGET)
-    if (NOT _boost_headers_real_target)
-        set(_boost_headers_real_target Boost::headers)
+        target_compile_definitions(Boost::headers INTERFACE BOOST_ALL_NO_LIB)
     endif()
-
-    foreach(_inc_path IN LISTS _boost_module_includes)
-        set_property(TARGET ${_boost_headers_real_target} APPEND PROPERTY
-            INTERFACE_INCLUDE_DIRECTORIES "$<BUILD_INTERFACE:${_inc_path}>")
-    endforeach()
 endif()
