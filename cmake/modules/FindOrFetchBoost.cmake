@@ -1,18 +1,17 @@
 # SPDX-License-Identifier: BSD-3-Clause
 # update the Boost version that we can tolerate
-
-if (NOT DEFINED Boost_OLDEST_BOOST_VERSION)
-    set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
-else()
-    if (${Boost_OLDEST_BOOST_VERSION} VERSION_LESS ${TTG_OLDEST_BOOST_VERSION})
-        if (DEFINED CACHE{Boost_OLDEST_BOOST_VERSION})
-            set(Boost_OLDEST_BOOST_VERSION "${TTG_OLDEST_BOOST_VERSION}" CACHE STRING "Oldest Boost version to use" FORCE)
-        else()
-            set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
+if(USE_PARSEC)
+    if (NOT DEFINED Boost_OLDEST_BOOST_VERSION)
+        set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
+    else()
+        if (${Boost_OLDEST_BOOST_VERSION} VERSION_LESS ${TTG_OLDEST_BOOST_VERSION})
+            if (DEFINED CACHE{Boost_OLDEST_BOOST_VERSION})
+                set(Boost_OLDEST_BOOST_VERSION "${TTG_OLDEST_BOOST_VERSION}" CACHE STRING "Oldest Boost version to use" FORCE)
+            else()
+                set(Boost_OLDEST_BOOST_VERSION ${TTG_OLDEST_BOOST_VERSION})
+            endif()
         endif()
     endif()
-endif()
-if(USE_PARSEC)
     # Boost can be discovered by every (sub)package but only the top package can *build* it ...
     # in either case must declare the components used by TTG
     set(required_components
@@ -71,6 +70,131 @@ if(USE_PARSEC)
 else()
     include(FetchContent)
 
+    set(Boost_ALL_COMPONENTS_NONMODULAR
+        headers chrono context graph filesystem iostreams locale log math_tr1 
+        math_c99 mpi program_options python random regex serialization thread timer wave
+    )
+
+    set(Boost_ALL_COMPONENTS
+        algorithm align any atomic array assert bind chrono circular_buffer compute 
+        concept_check config container container_hash conversion core date_time 
+        describe detail dynamic_bitset endian exception filesystem function 
+        functional function_types fusion headers integer intrusive io iostreams 
+        iterator lexical_cast logic math move mp11 mpl multiprecision multi_index 
+        numeric_conversion numeric_interval numeric_ublas optional parameter 
+        phoenix pool predef preprocessor property_tree proto random range ratio 
+        regex serialization smart_ptr spirit static_assert system test thread 
+        throw_exception tokenizer tti tuple typeof type_index type_traits 
+        unordered utility uuid variant variant2 winapi
+    )
+
+    macro(component_to_targets _comp _targets)
+        if ("${${_comp}}" STREQUAL "test")
+            set(${_targets} unit_test_framework)
+        else()
+            set(${_targets} ${${_comp}})
+        endif()
+    endmacro()
+
+    macro(intersection _out _in1 _in2)
+        set(${_out})
+        foreach(x IN LISTS ${_in1})
+            if(x IN_LIST ${_in2})
+                list(APPEND ${_out} ${x})
+            endif()
+        endforeach()
+    endmacro()
+
+    set(BOOST_REQUIRED_VERSION "1.87.0")
+    string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
+
+    if(NOT Boost_REQUIRED_COMPONENTS)
+        set(Boost_REQUIRED_COMPONENTS headers unordered random serialization system filesystem iostreams)
+    endif()
+
+    find_package(Boost ${BOOST_REQUIRED_VERSION} QUIET COMPONENTS ${Boost_REQUIRED_COMPONENTS})
+
+    if (NOT Boost_FOUND AND NOT TARGET Boost::headers)
+        message(STATUS "Boost ${BOOST_REQUIRED_VERSION} not found. Fetching via FetchContent...")
+
+        FetchContent_Declare(
+            Boost
+            URL "https://archives.boost.io/release/${BOOST_REQUIRED_VERSION}/source/boost_${BOOST_VERSION_UNDERSCORES}.tar.gz"
+            URL_HASH SHA256=f55c340aa49763b1925ccf02b2e83f35fdcf634c9d5164a2acb87540173c741d
+            DOWNLOAD_EXTRACT_TIMESTAMP ON
+        )
+
+        set(BOOST_INCLUDE_LIBRARIES ${Boost_REQUIRED_COMPONENTS} CACHE STRING "" FORCE)
+        set(BOOST_INSTALL OFF CACHE BOOL "" FORCE)
+
+        FetchContent_MakeAvailable(Boost)
+        FetchContent_GetProperties(Boost SOURCE_DIR boost_SOURCE_DIR)
+
+        foreach(lib IN LISTS Boost_REQUIRED_COMPONENTS)
+            component_to_targets(lib __lib_targets)
+            foreach(tgt IN LISTS __lib_targets)
+                if (NOT TARGET Boost::${tgt})
+                    if (TARGET boost_${tgt})
+                        add_library(Boost::${tgt} ALIAS boost_${tgt})
+                    else()
+                        add_library(Boost_${tgt}_interface INTERFACE)
+                        add_library(Boost::${tgt} ALIAS Boost_${tgt}_interface)
+                        target_include_directories(Boost_${tgt}_interface INTERFACE "${boost_SOURCE_DIR}")
+                    endif()
+                endif()
+            endforeach()
+        endforeach()
+    endif()
+
+    if (TARGET Boost::headers)
+        if (NOT TARGET Boost_headers)
+            add_library(Boost_headers INTERFACE)
+            target_link_libraries(Boost_headers INTERFACE Boost::headers)
+        endif()
+
+        target_compile_definitions(Boost::headers INTERFACE BOOST_ALL_NO_LIB)
+        message(STATUS "FindOrFetchBoost: Boost ${BOOST_REQUIRED_VERSION} is ready.")
+    else()
+        message(FATAL_ERROR "FindOrFetchBoost: Could not find or download Boost.")
+    endif()
+endif()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ include(FetchContent)
+
     set(BOOST_REQUIRED_VERSION "1.87.0")
     string(REPLACE "." "_" BOOST_VERSION_UNDERSCORES ${BOOST_REQUIRED_VERSION})
 
@@ -117,4 +241,3 @@ else()
         target_compile_definitions(Boost_headers INTERFACE BOOST_ALL_NO_LIB)
         target_compile_definitions(Boost_headers INTERFACE BOOST_SYSTEM_NO_DEPRECATED)
     endif()
-endif()
