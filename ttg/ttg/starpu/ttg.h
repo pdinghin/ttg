@@ -806,12 +806,12 @@ namespace ttg_starpu {
   }
 
   namespace detail {
-    template <typename TT,typename keyT>
+    template <typename TT>
     struct StarPUTTBase {
      protected:
       starpu_codelet_t * self_task_class = nullptr;
-      std::unique_ptr<starpu_hash_table<TT,keyT>> tasks_table;
-      std::unique_ptr<starpu_hash_table<TT,keyT>> task_constraint_table;
+      std::unique_ptr<starpu_hash_table<TT>> tasks_table;
+      std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
       StarPUTTBase() 
         : tasks_table(),
@@ -836,7 +836,7 @@ namespace ttg_starpu {
   }  // namespace detail
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
-  class TT : public ttg::TTBase, detail::StarPUTTBase<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>,keyT> {
+  class TT : public ttg::TTBase, detail::StarPUTTBase<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>> {
    private:
     /// preconditions
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
