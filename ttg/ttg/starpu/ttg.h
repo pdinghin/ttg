@@ -1891,7 +1891,7 @@ namespace ttg_starpu {
             to_remove = true;
           }
           callback_fn(item);
-        }, key);
+        });
         if(to_remove) {
           task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
           remove_from_hash = false;
