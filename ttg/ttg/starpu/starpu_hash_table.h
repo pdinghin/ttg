@@ -50,8 +50,8 @@ namespace ttg_starpu {
         // Remove an item if the key is present and func returns true on it.
         // Returns deleted item pointer.
         //TODO : Need to delete task later
-        template <typename starpu_key_t, typename F, typename... Args>
-        task_t* starpu_hash_table_remove(starpu_key_t key,F &&func, Args&&... args){
+        template <typename KeyT, typename F, typename... Args>
+        task_t* starpu_hash_table_remove(KeyT key,F &&func, Args&&... args){
             task_t* task = nullptr;
             this->erase_if(key, [&](auto& item){
                 if(func(item.second,std::forward<Args>(args)...)){

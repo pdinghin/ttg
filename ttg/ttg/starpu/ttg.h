@@ -1890,7 +1890,7 @@ namespace ttg_starpu {
           if(!reducer && numins == (item->in_data_count + 1)) {
             to_remove = true;
           }
-          callback_fn(&item);
+          callback_fn(item);
         });
         if(to_remove) {
           task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
