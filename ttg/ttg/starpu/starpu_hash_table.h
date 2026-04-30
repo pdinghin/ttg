@@ -12,7 +12,7 @@ typedef uintptr_t starpu_key_t;
 namespace ttg_starpu {
 
 
-    template <typename TT, typename Key>
+    template <typename TT, typename keyT>
     class starpu_hash_table : public boost::unordered::concurrent_flat_map<starpu_key_t, detail::starpu_ttg_task_t<TT>*> {
         private:
         using task_t = detail::starpu_ttg_task_t<TT>;
@@ -43,7 +43,7 @@ namespace ttg_starpu {
 
         //Emplace an item if the key is not present and apply F1 to it, otherwise visit the item and apply F2 to it.
         template <typename F1, typename F2>
-        bool starpu_hash_table_try_emplace_and_visit(starpu_key_t starpu_key, F1 &&func_new, F2 &&func_visit, Key key){
+        bool starpu_hash_table_try_emplace_and_visit(starpu_key_t starpu_key, F1 &&func_new, F2 &&func_visit, keyT key){
             return this->try_emplace_and_visit(starpu_key, [&](){ return func_new(key); }, [&](auto& item){ func_visit(item.second); });
         }
 
