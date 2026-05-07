@@ -2470,7 +2470,7 @@ namespace ttg_starpu {
         task_t *task = nullptr;
         if(!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
           task = item;
-        });){
+        })){
           ttg::print_error(world.rank(), ":", get_name(), " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("TT::finalize called on stream that never received an input data");
         }
