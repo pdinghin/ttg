@@ -26,9 +26,8 @@ namespace ttg_starpu {
         //return true if the key is present, false otherwise.
         template <typename F>
         bool starpu_hash_table_visit(starpu_key_t key, F func){
-            return this->visit(key, [&](typename flat_map_t::value_type &item){
+            return this->visit(key, [&](auto& item){
                 func(item.second);
-                return true;
             });
         }
         
@@ -37,7 +36,6 @@ namespace ttg_starpu {
         bool starpu_hash_table_emplace_or_visit(starpu_key_t key, F &&func, task_t*&& new_task){
             return this->emplace_or_visit(key, new_task, [&](auto& item){
                 func(item.second);
-                return true;
             });
         }
 

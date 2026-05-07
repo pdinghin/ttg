@@ -2418,16 +2418,13 @@ namespace ttg_starpu {
 
         starpu_key_t hk = 0;
         task_t *task;
-        // starpu_hash_table_lock_bucket(&tasks_table, hk);
-        // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-        //   task = create_new_task(ttg::Void{});
-        //   world.impl().increment_created();
-        //   parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-        //   if( world.impl().dag_profiling() ) {
-
-        //   }
-        // }
-        // starpu_hash_table_unlock_bucket(&tasks_table, hk);
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+          task = create_new_task(ttg::Void{});
+          world.impl().increment_created();
+          return task;
+        }, [&](auto& item){
+          task = item;
+        });
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2471,12 +2468,12 @@ namespace ttg_starpu {
 
         auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task = nullptr;
-        // starpu_hash_table_lock_bucket(&tasks_table, hk);
-        // if (nullptr == (task = (task_t *)parsec_hash_table_find(&tasks_table, hk))) {
-        //   ttg::print_error(world.rank(), ":", get_name(), ":", key,
-        //                    " : error finalize called on stream that never received an input data: ", i);
-        //   throw std::runtime_error("TT::finalize called on stream that never received an input data");
-        // }
+        if(!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
+          task = item;
+        });){
+          ttg::print_error(world.rank(), ":", get_name(), " : error finalize called on stream that never received an input data: ", i);
+          throw std::runtime_error("TT::finalize called on stream that never received an input data");
+        }
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2521,9 +2518,7 @@ namespace ttg_starpu {
         std::size_t c;
         // hash_table_find without lock 
         if (!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
-              item.second->streams[i].goal = 1;
-              c = item.second->streams[i].reduce_count.load(std::memory_order_acquire);
-              task = &item.second;
+              task = item;
             })) {
           ttg::print_error(world.rank(), ":", get_name(),
                            " : error finalize called on stream that never received an input data: ", i);
@@ -2538,6 +2533,9 @@ namespace ttg_starpu {
         // 2) set the goal
         // 3) "unlock" the stream
         // only one thread will see the reduce_count be zero and the goal match the size
+        task->streams[i].reduce_count.fetch_add(1, std::memory_order_acquire);
+        task->streams[i].goal = 1;
+        auto c = task->streams[i].reduce_count.fetch_sub(1, std::memory_order_release);
         if (1 == c && (task->streams[i].size >= 1)) {
           release_task(task);
         }
