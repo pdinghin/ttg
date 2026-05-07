@@ -1996,8 +1996,8 @@ namespace ttg_starpu {
       if (is_ready) {
         count = numins;
       } else {
-         count = task->in_data_count.fetch_add(1, std::memory_order_acq_rel) + 1;
-         assert(count <= self.dependencies_goal);
+        count = __atomic_fetch_add(&task->in_data_count, 1, __ATOMIC_ACQ_REL) + 1;
+        // assert(count <= self.dependencies_goal);
       }
 
       auto &world_impl = world.impl();
@@ -2367,12 +2367,12 @@ namespace ttg_starpu {
         auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task;
         //TODO: Verify if we need to put fetch_add/sub here
-        tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
           task = create_new_task(key);
           world.impl().increment_created();
           return task;
         }, [&](auto& item){
-          task = item.second;
+          task = item;
         });
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
