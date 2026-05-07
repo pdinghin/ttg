@@ -817,19 +817,16 @@ namespace ttg_starpu {
         : tasks_table(),
           task_constraint_table()
       {
-        // TODO: Initialize starpu_codelet_t
+        // TODO: Initialize starpu_codelet_t ?
         self_task_class = nullptr;
       }
 
-      /* Accessors to maintain API compatibility with previous direct member access
-       * The operator-> allows using this->tasks_table->method() transparently */
 
       ~StarPUTTBase() {
         if (nullptr != self_task_class) {
           // starpu_task_class_destroy(self_task_class);
           self_task_class = nullptr;
         }
-        // unique_ptr destructor automatically cleans up tasks_table and task_constraint_table
       }
     };
 
@@ -1851,11 +1848,6 @@ namespace ttg_starpu {
 
             submit_reducer_task(task);
           }
-          //if (release) {
-          //  parsec_hash_table_nolock_remove(&tasks_table, hk);
-          //  remove_from_hash = false;
-          //}
-          //parsec_hash_table_unlock_bucket(&tasks_table, hk);
         } else {
           
           /* whether the task needs to be deferred or not */
@@ -1883,9 +1875,11 @@ namespace ttg_starpu {
       if (numins > 1 || reducer) {
         
         this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+          task_t *new_task = create_new_task(key);
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
-          return create_new_task(key);
+          callback_fn(new_task);
+          return new_task;
         }, [&](auto& item){
           if(!reducer && numins == (item->in_data_count + 1)) {
             to_remove = true;
@@ -1894,16 +1888,15 @@ namespace ttg_starpu {
         });
         if(to_remove) {
           task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
-          remove_from_hash = false;
+          task->remove_from_hash = false;
         }
       } else {
         task = create_new_task(key);
         world_impl.increment_created();
-        remove_from_hash = false;
         callback_fn(task);
-        
+        task->remove_from_hash = false;
       }
-      task->remove_from_hash = remove_from_hash;
+      
       if (release) {
         release_task(task, task_ring);
       }
@@ -2003,8 +1996,8 @@ namespace ttg_starpu {
       if (is_ready) {
         count = numins;
       } else {
-        // count = parsec_atomic_fetch_inc_int32(&task->in_data_count) + 1;
-        // assert(count <= self.dependencies_goal);
+         count = task->in_data_count.fetch_add(1, std::memory_order_acq_rel) + 1;
+         assert(count <= self.dependencies_goal);
       }
 
       auto &world_impl = world.impl();
@@ -2373,15 +2366,14 @@ namespace ttg_starpu {
 
         auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task;
-        // starpu_hash_table_lock_bucket(&tasks_table, hk);
-        // if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
-        //   task = create_new_task(key);
-        //   world.impl().increment_created();
-        //   parsec_hash_table_nolock_insert(&tasks_table, &task->tt_ht_item);
-        //   if( world.impl().dag_profiling() ) {
-        //   }
-        // }
-        // starpu_hash_table_unlock_bucket(&tasks_table, hk);
+        //TODO: Verify if we need to put fetch_add/sub here
+        tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+          task = create_new_task(key);
+          world.impl().increment_created();
+          return task;
+        }, [&](auto& item){
+          task = item.second;
+        });
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
