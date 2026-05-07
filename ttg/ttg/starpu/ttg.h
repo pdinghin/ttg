@@ -2515,8 +2515,6 @@ namespace ttg_starpu {
 
         auto hk = static_cast<starpu_key_t>(0);
         task_t *task = nullptr;
-        std::size_t c;
-        // hash_table_find without lock 
         if (!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
               task = item;
             })) {
