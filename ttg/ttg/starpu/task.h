@@ -192,7 +192,7 @@ namespace ttg_starpu {
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
-        this->starpu_task->cl = tt->tt_cl;
+        this->starpu_task->cl = &tt->starpu_tt_cl;
       }
 
 
@@ -202,7 +202,7 @@ namespace ttg_starpu {
         , tt(tt_ptr), key(key)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
-        this->starpu_task->cl = tt->tt_cl;
+        this->starpu_task->cl = &tt->starpu_tt_cl;
         init_stream_info(tt, streams);
       }
 
@@ -242,7 +242,7 @@ namespace ttg_starpu {
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
-        this->starpu_task->cl = tt->tt_cl;
+        this->starpu_task->cl = &tt->starpu_tt_cl;
       }
 
       starpu_ttg_task_t(int32_t priority, TT *tt_ptr)
@@ -251,7 +251,7 @@ namespace ttg_starpu {
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
-        this->starpu_task->cl = tt->tt_cl;
+        this->starpu_task->cl = &tt->starpu_tt_cl;
         init_stream_info(tt, streams);
       }
 

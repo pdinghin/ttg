@@ -512,13 +512,13 @@ namespace ttg_starpu {
     }
 
     template<typename TT>
-    inline starpu_hook_return_t hook(void *descr[],void *cl_arg) {
+    inline void hook(void *descr[],void *cl_arg) {
       starpu_ttg_task_t<TT> *me ;
       starpu_codelet_unpack_args(cl_arg, &me);
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
         transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
       }
-      return me->template invoke_op<ttg::ExecutionSpace::Host>();
+      me->template invoke_op<ttg::ExecutionSpace::Host>();
     }
 
     template <typename KeyT, typename ActivationCallbackT>
@@ -810,7 +810,7 @@ namespace ttg_starpu {
     template <typename TT>
     struct StarPUTTBase {
      protected:
-      starpu_codelet_t starpu_tt_cl;
+      struct starpu_codelet starpu_tt_cl;
       std::unique_ptr<starpu_hash_table<TT>> tasks_table;
       std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
@@ -818,11 +818,9 @@ namespace ttg_starpu {
         : tasks_table(),
           task_constraint_table()
       {
-        starpu_tt_cl = {
-          .where = STARPU_CPU,
-          .cpu_funcs = {detail::hook<TT>},
-          .nbuffers = 0
-        };
+        starpu_tt_cl.where = STARPU_CPU;
+        starpu_tt_cl.cpu_funcs[0] = &detail::hook<TT>;
+        starpu_tt_cl.nbuffers = 0;
       }
 
 
@@ -1866,7 +1864,7 @@ namespace ttg_starpu {
           task = create_new_task(key);
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
-          callback_fn(new_task);
+          callback_fn(task);
           return task;
         }, [&](auto& item){
           if(!reducer && numins == (item->in_data_count + 1)) {
@@ -1907,7 +1905,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        this->task_constraint_table.starpu_hash_table_insert(hk, task);
+        //this->task_constraint_table.starpu_hash_table_insert(hk, task);
       }
       return !constrained;
     }
