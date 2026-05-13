@@ -512,8 +512,9 @@ namespace ttg_starpu {
     }
 
     template<typename TT>
-    inline starpu_hook_return_t hook(void *es, starpu_task_t *starpu_task) {
-      starpu_ttg_task_t<TT> *me = (starpu_ttg_task_t<TT> *)starpu_task;
+    inline starpu_hook_return_t hook(void *descr[],void *cl_arg) {
+      starpu_ttg_task_t<TT> *me ;
+      starpu_codelet_unpack_args(cl_arg, &me);
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
         transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
       }
@@ -809,7 +810,7 @@ namespace ttg_starpu {
     template <typename TT>
     struct StarPUTTBase {
      protected:
-      starpu_codelet_t * self_task_class = nullptr;
+      starpu_codelet_t starpu_tt_cl;
       std::unique_ptr<starpu_hash_table<TT>> tasks_table;
       std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
@@ -817,16 +818,16 @@ namespace ttg_starpu {
         : tasks_table(),
           task_constraint_table()
       {
-        // TODO: Initialize starpu_codelet_t ?
-        self_task_class = nullptr;
+        starpu_tt_cl = {
+          .where = STARPU_CPU,
+          .cpu_funcs = {detail::hook<TT>},
+          .nbuffers = 0
+        };
       }
 
 
       ~StarPUTTBase() {
-        if (nullptr != self_task_class) {
-          // starpu_task_class_destroy(self_task_class);
-          self_task_class = nullptr;
-        }
+        //TODO: make sure all tasks have completed before we destroy the task tables
       }
     };
 
@@ -1350,16 +1351,7 @@ namespace ttg_starpu {
     template <size_t i, typename valueT>
     void set_arg_from_msg_keylist(ttg::span<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
       /* create a dummy task that holds the copy, which can be reused by others */
-      task_t *dummy;
-      // starpu_execution_stream_s *es = world.impl().execution_stream();
-      // parsec_thread_mempool_t *mempool = get_task_mempool();
-      // dummy = new (parsec_thread_mempool_allocate(mempool)) task_t(mempool, &this->self, this);
-      // dummy->set_dummy(true);
-      // // TODO: do we need to copy static_stream_goal in dummy?
-
-      // /* set the received value as the dummy's only data */
-      // dummy->copies[0] = copy;
-
+      task_t *dummy = nullptr;
 
       /* save the current task and set the dummy task */
       auto starpu_ttg_caller_save = detail::starpu_ttg_caller;
@@ -1391,10 +1383,6 @@ namespace ttg_starpu {
 
       /* restore the previous task */
       detail::starpu_ttg_caller = starpu_ttg_caller_save;
-
-      /* release the dummy task */
-      //complete_task_and_release(es, &dummy->starpu_task);
-      //parsec_thread_mempool_free(mempool, &dummy->starpu_task);
     }
 
     // there are 6 types of set_arg:
@@ -1875,11 +1863,11 @@ namespace ttg_starpu {
       if (numins > 1 || reducer) {
         
         this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
-          task_t *new_task = create_new_task(key);
+          task = create_new_task(key);
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
           callback_fn(new_task);
-          return new_task;
+          return task;
         }, [&](auto& item){
           if(!reducer && numins == (item->in_data_count + 1)) {
             to_remove = true;
@@ -1908,7 +1896,7 @@ namespace ttg_starpu {
       }
     }
 
-    bool check_constraints(task_t *task) {
+    bool check_constraints(task_t *task, starpu_key_t hk) {
       bool constrained = false;
       if (constraints_check.size() > 0) {
         if constexpr (ttg::meta::is_void_v<keyT>) {
@@ -1919,7 +1907,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        //starpu_hash_table_insert(&task_constraint_table, &task->tt_ht_item);
+        this->task_constraint_table.starpu_hash_table_insert(hk, task);
       }
       return !constrained;
     }
@@ -1939,7 +1927,7 @@ namespace ttg_starpu {
         // no constraint blocked us
         task_t *task;
         starpu_key_t hk = 0;
-        //task = (task_t*)parsec_hash_table_remove(&task_constraint_table, hk);
+        task = this->tasks_constraint_table.starpu_hash_table_remove(hk,[](auto& item){return true;});
         assert(task != nullptr);
         auto &world_impl = world.impl();
         //starpu_execution_stream_t *es = world_impl.execution_stream();
@@ -1965,7 +1953,7 @@ namespace ttg_starpu {
         if (release) {
           // no constraint blocked this task, so go ahead and release
           auto hk = reinterpret_cast<starpu_key_t>(&key);
-          //task = (task_t*)starpu_hash_table_remove(&task_constraint_table, hk);
+          task = this->tasks_constraint_table.starpu_hash_table_remove(hk,[](auto& item){return true;});
           assert(task != nullptr);
           if (task_ring == nullptr) {
             /* the first task is set directly */
@@ -2015,7 +2003,7 @@ namespace ttg_starpu {
         }
         if (task->remove_from_hash) this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
 
-        if (check_constraints(task)) {
+        if (check_constraints(task,hk)) {
           if (nullptr == task_ring) {
             starpu_task_t *vp_task_rings[1] = { task->starpu_task };
             //__parsec_schedule_vp(es, vp_task_rings, 0);
@@ -2941,68 +2929,15 @@ namespace ttg_starpu {
       register_input_callbacks(std::make_index_sequence<numinedges>{});
       int i;
 
-      //memset(&self, 0, sizeof(parsec_task_class_t));
 
-      // self.name = strdup(get_name().c_str());
-      // self.task_class_id = get_instance_id();
-      // self.nb_parameters = 0;
-      // self.nb_locals = 0;
-      //self.nb_flows = numflows;
-      //self.nb_flows = MAX_PARAM_COUNT; // we're not using all flows but have to
-                                       // trick the device handler into looking at all of them
 
       if( world_impl.profiling() ) {
-        // first two ints are used to store the hash of the key.
-        //self.nb_parameters = (sizeof(void*)+sizeof(int)-1)/sizeof(int);
-        // seconds two ints are used to store a pointer to the key of the task.
-        //self.nb_locals     = self.nb_parameters + (sizeof(void*)+sizeof(int)-1)/sizeof(int);
 
-        // If we have parameters and locals, we need to define the corresponding dereference arrays
-        // self.params[0] = &detail::parsec_taskclass_param0;
-        // self.params[1] = &detail::parsec_taskclass_param1;
-
-        // self.locals[0] = &detail::parsec_taskclass_param0;
-        // self.locals[1] = &detail::parsec_taskclass_param1;
-        // self.locals[2] = &detail::parsec_taskclass_param2;
-        // self.locals[3] = &detail::parsec_taskclass_param3;
       }
-      // self.make_key = make_key;
-      // self.key_functions = &tasks_hash_fcts;
-      // self.task_snprintf = parsec_ttg_task_snprintf;
-
-
-      //world_impl.taskpool()->nb_task_classes = std::max(world_impl.taskpool()->nb_task_classes, static_cast<decltype(world_impl.taskpool()->nb_task_classes)>(self.task_class_id+1));
-      //    function_id_to_instance[self.task_class_id] = this;
-      //self.incarnations = incarnations_array.data();
-//#if 0
-
-      // self.incarnations = (__parsec_chore_t *)malloc(2 * sizeof(__parsec_chore_t));
-      // ((__parsec_chore_t *)self.incarnations)[0].type = PARSEC_DEV_CPU;
-      // ((__parsec_chore_t *)self.incarnations)[0].evaluate = NULL;
-      // ((__parsec_chore_t *)self.incarnations)[0].hook = &detail::hook<TT>;
-      // ((__parsec_chore_t *)self.incarnations)[1].type = PARSEC_DEV_NONE;
-      // ((__parsec_chore_t *)self.incarnations)[1].evaluate = NULL;
-      // ((__parsec_chore_t *)self.incarnations)[1].hook = NULL;
-
-//#endif // 0
 
       // self.release_task = &parsec_release_task_to_mempool_update_nbtasks;
       // self.complete_execution = complete_task_and_release;
 
-      for (i = 0; i < MAX_PARAM_COUNT; i++) {
-        // parsec_flow_t *flow = new parsec_flow_t;
-        // flow->name = strdup((std::string("flow in") + std::to_string(i)).c_str());
-        // flow->sym_type = PARSEC_SYM_INOUT;
-        // see initialize_flows below
-        // flow->flow_flags = PARSEC_FLOW_ACCESS_RW;
-        // flow->dep_in[0] = NULL;
-        // flow->dep_out[0] = NULL;
-        // flow->flow_index = i;
-        // flow->flow_datatype_mask = ~0;
-        // *((parsec_flow_t **)&(self.in[i])) = flow;
-      }
-      //*((parsec_flow_t **)&(self.in[i])) = NULL;
-      //initialize_flows<input_terminals_type>(self.in);
 
       for (i = 0; i < MAX_PARAM_COUNT; i++) {
         // parsec_flow_t *flow = new parsec_flow_t;
@@ -3015,10 +2950,6 @@ namespace ttg_starpu {
         // flow->flow_datatype_mask = (1 << i);
         // *((parsec_flow_t **)&(self.out[i])) = flow;
       }
-      //*((parsec_flow_t **)&(self.out[i])) = NULL;
-
-      // self.flags = 0;
-      // self.dependencies_goal = numins; /* (~(uint32_t)0) >> (32 - numins); */
 
       int nbthreads = 0;
       //TODO: May we use starpu_get_num_threads()

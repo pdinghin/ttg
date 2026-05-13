@@ -156,7 +156,7 @@ namespace ttg_starpu {
         , copies(copies)
         , defer_writer(defer_writer_flag)
       {
-        // TODO: Initialize StarPU task when needed
+        starpu_task = starpu_task_create();
       }
 
       starpu_ttg_task_base_t(int32_t priority, int data_count, 
@@ -168,7 +168,7 @@ namespace ttg_starpu {
         , release_task_cb(release_fn)
         , defer_writer(defer_writer_flag)
       {
-        // TODO: Initialize StarPU task when scheduling
+        starpu_task = starpu_task_create();
       }
 
     public:
@@ -192,6 +192,7 @@ namespace ttg_starpu {
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
+        this->starpu_task->cl = tt->tt_cl;
       }
 
 
@@ -201,6 +202,8 @@ namespace ttg_starpu {
         , tt(tt_ptr), key(key)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
+        this->starpu_task->cl = tt->tt_cl;
+        init_stream_info(tt, streams);
       }
 
 
@@ -239,6 +242,7 @@ namespace ttg_starpu {
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
+        this->starpu_task->cl = tt->tt_cl;
       }
 
       starpu_ttg_task_t(int32_t priority, TT *tt_ptr)
@@ -247,21 +251,10 @@ namespace ttg_starpu {
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
+        this->starpu_task->cl = tt->tt_cl;
         init_stream_info(tt, streams);
       }
 
-
-      //Starpu_ttg_task_t constructor for new element in starpu_hash_table_t.
-      starpu_ttg_task_t(TT *tt_ptr,std::function<void(starpu_ttg_task_t*)> callback_fn)
-        :
-       starpu_ttg_task_base_t(num_streams, copies)
-        , tt(tt_ptr)
-      {
-        this->dev_ptr = this->dev_state.dev_ptr();
-        callback_fn(this);
-      }
-
-      
 
       static void release_task(starpu_ttg_task_base_t* task_base) {
         starpu_ttg_task_t *task = static_cast<starpu_ttg_task_t*>(task_base);
