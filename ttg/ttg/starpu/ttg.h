@@ -513,8 +513,7 @@ namespace ttg_starpu {
 
     template<typename TT>
     inline void hook(void *descr[],void *cl_arg) {
-      starpu_ttg_task_t<TT> *me ;
-      starpu_codelet_unpack_args(cl_arg, &me);
+      auto *me = static_cast<starpu_ttg_task_t<TT>*>(cl_arg);
       if constexpr(std::tuple_size_v<typename TT::input_values_tuple_type> > 0) {
         transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
       }

@@ -129,6 +129,15 @@ namespace ttg_starpu {
         init_stream_info_impl<0>(tt, streams);
       }
 
+      void init_codelet_arg() {
+        if (starpu_task) {
+          auto *self = this;
+          std::memcpy(&task_cl_arg, &self, sizeof(self));
+          starpu_task->cl_arg = &task_cl_arg;
+          starpu_task->cl_arg_size = sizeof(task_cl_arg);
+        }
+      }
+
     public:
       typedef void (release_task_fn)(starpu_ttg_task_base_t*);
       
@@ -157,6 +166,7 @@ namespace ttg_starpu {
         , defer_writer(defer_writer_flag)
       {
         starpu_task = starpu_task_create();
+        init_codelet_arg();
       }
 
       starpu_ttg_task_base_t(int32_t priority, int data_count, 
@@ -169,6 +179,7 @@ namespace ttg_starpu {
         , defer_writer(defer_writer_flag)
       {
         starpu_task = starpu_task_create();
+        init_codelet_arg();
       }
 
     public:
