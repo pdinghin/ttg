@@ -25,7 +25,7 @@ namespace ttg_starpu {
         // Insert a task with a given key only  if there is no element in the table with an equivalent key.
         // Return true if an insert took place.
         bool starpu_hash_table_insert(starpu_key_t key, task_t* task){
-            return this->insert({key, task})
+            return this->insert({key, task});
         }
 
         //Visit an item if the key is present and apply func to it.
