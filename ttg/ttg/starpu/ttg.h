@@ -1929,8 +1929,7 @@ namespace ttg_starpu {
         assert(task != nullptr);
         auto &world_impl = world.impl();
         //starpu_execution_stream_t *es = world_impl.execution_stream();
-        starpu_task_t *vp_task_rings[1] = { &task->starpu_task };
-        //__parsec_schedule_vp(es, vp_task_rings, 0);
+        starpu_task_submit(task->starpu_task);
       }
     }
 
@@ -1965,9 +1964,7 @@ namespace ttg_starpu {
       }
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
-        //starpu_execution_stream_t *es = world_impl.execution_stream();
-        starpu_task_t *vp_task_rings[1] = { task_ring };
-        //__parsec_schedule_vp(es, vp_task_rings, 0);
+        starpu_task_submit(task->starpu_task);
       }
     }
 
@@ -2003,8 +2000,7 @@ namespace ttg_starpu {
 
         if (check_constraints(task,hk)) {
           if (nullptr == task_ring) {
-            starpu_task_t *vp_task_rings[1] = { task->starpu_task };
-            //__parsec_schedule_vp(es, vp_task_rings, 0);
+            starpu_task_submit(task->starpu_task);
           } else if (*task_ring == nullptr) {
             /* the first task is set directly */
             *task_ring = task->starpu_task;
