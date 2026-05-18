@@ -1964,7 +1964,9 @@ namespace ttg_starpu {
       }
       if (nullptr != task_ring) {
         auto &world_impl = world.impl();
-        starpu_task_submit(task->starpu_task);
+        //starpu_execution_stream_t *es = world_impl.execution_stream();
+        starpu_task_t *vp_task_rings[1] = { task_ring };
+        //__parsec_schedule_vp(es, vp_task_rings, 0);
       }
     }
 
