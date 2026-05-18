@@ -144,7 +144,7 @@ namespace ttg_starpu {
       device_ptr_t* dev_ptr = nullptr;
       bool remove_from_hash = true;
       bool dummy = false;
-      bool defer_writer = true;  // TODO: Use TTG configuration when available
+      bool defer_writer = TTG_STARPU_DEFER_WRITER; 
       ttg_starpu_data_flags data_flags;
 
       void release_task() {

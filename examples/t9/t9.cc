@@ -355,10 +355,10 @@ int main(int argc, char** argv) {
 
     // auto printer = make_printer(a);
     // auto printer2 = make_printer(b);
-    // auto printer = make_printer(a_plus_b);
+     auto printer = make_printer(a_plus_b);
     // auto printer2 = make_printer(err);
-    // auto printer4 = make_printer(deriva,"numerical deriv");
-    // auto printer5 = make_printer(diffa, "    exact deriv");
+     auto printer4 = make_printer(deriva,"numerical deriv");
+     auto printer5 = make_printer(diffa, "    exact deriv");
     // auto printer6 = make_printer(err,"differr");
     // auto pp = make_printer(compa,"compa");
     // auto pp = make_printer(compa,"compa");

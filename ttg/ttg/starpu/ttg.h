@@ -1355,7 +1355,7 @@ namespace ttg_starpu {
       detail::starpu_ttg_caller = dummy;
 
       /* iterate over the keys and have them use the copy we made */
-      starpu_task_t *task_ring = nullptr;
+      std::vector<starpu_task_t*> task_ring;
       for (auto &&key : keylist) {
         // copy-constructible? can broadcast to any number of keys
         if constexpr (std::is_copy_constructible_v<valueT>) {
@@ -1372,10 +1372,10 @@ namespace ttg_starpu {
         }
       }
 
-      if (nullptr != task_ring) {
-        auto &world_impl = world.impl();
-        starpu_task_t *vp_task_ring[1] = { task_ring };
-        //__parsec_schedule_vp(world_impl.execution_stream(), vp_task_ring, 0);
+      if (!task_ring.empty()) {
+        for (auto *task_ptr : task_ring) {
+          starpu_task_submit(task_ptr);
+        }
       }
 
       /* restore the previous task */
@@ -1735,7 +1735,7 @@ namespace ttg_starpu {
     // Used to set the i'th argument
     template <std::size_t i, typename Key, typename Value>
     void set_arg_local_impl(const Key &key, Value &&value, detail::ttg_data_copy_t *copy_in = nullptr,
-                            starpu_task_t **task_ring = nullptr) {
+                            std::vector<starpu_task_t*> *task_ring = nullptr) {
       using valueT = std::tuple_element_t<i, input_values_full_tuple_type>;
       constexpr const bool input_is_const = std::is_const_v<std::tuple_element_t<i, input_args_type>>;
       constexpr const bool valueT_is_Void = ttg::meta::is_void_v<valueT>;
@@ -1935,7 +1935,7 @@ namespace ttg_starpu {
     template<typename Key = keyT>
     std::enable_if_t<!ttg::meta::is_void_v<Key>, void> release_constraint(std::size_t cid, const std::span<Key>& keys) {
       assert(cid < constraints_check.size());
-      starpu_task_t *task_ring = nullptr;
+      std::vector<starpu_task_t*> task_ring;
       for (auto& key : keys) {
         task_t *task;
         bool release = true;
@@ -1951,26 +1951,18 @@ namespace ttg_starpu {
           auto hk = reinterpret_cast<starpu_key_t>(&key);
           task = this->task_constraint_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
           assert(task != nullptr);
-          if (task_ring == nullptr) {
-            /* the first task is set directly */
-            task_ring = &task->starpu_task;
-          } else {
-            /* push into the ring */
-            // parsec_list_item_ring_push_sorted(&task_ring->super, &task->starpu_task.super,
-            //                                   offsetof(starpu_task_t, priority));
-          }
+          task_ring.push_back(&task->starpu_task);
         }
       }
-      if (nullptr != task_ring) {
-        auto &world_impl = world.impl();
-        //starpu_execution_stream_t *es = world_impl.execution_stream();
-        starpu_task_t *vp_task_rings[1] = { task_ring };
-        //__parsec_schedule_vp(es, vp_task_rings, 0);
+      if (!task_ring.empty()) {
+        for (auto *task_ptr : task_ring) {
+          starpu_task_submit(task_ptr);
+        }
       }
     }
 
     void release_task(task_t *task,
-                      starpu_task_t **task_ring = nullptr) {
+                      std::vector<starpu_task_t*> *task_ring = nullptr) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
 
       /* if remove_from_hash == false, someone has already removed the task from the hash table
@@ -2002,13 +1994,8 @@ namespace ttg_starpu {
         if (check_constraints(task,hk)) {
           if (nullptr == task_ring) {
             starpu_task_submit(task->starpu_task);
-          } else if (*task_ring == nullptr) {
-            /* the first task is set directly */
-            *task_ring = task->starpu_task;
           } else {
-            /* push into the ring */
-            // parsec_list_item_ring_push_sorted(&(*task_ring)->super, &task->starpu_task.super,
-            //                                   offsetof(starpu_task_t, priority));
+            task_ring->push_back(task->starpu_task);
           }
         }
       } else if constexpr (!ttg::meta::is_void_v<keyT>) {
@@ -2224,7 +2211,7 @@ namespace ttg_starpu {
     template <int i, typename Iterator, typename Value>
     void broadcast_arg_local(Iterator &&begin, Iterator &&end, const Value &value) {
 
-      starpu_task_t *task_ring = nullptr;
+      std::vector<starpu_task_t*> task_ring;
       detail::ttg_data_copy_t *copy = nullptr;
       if (nullptr != detail::starpu_ttg_caller) {
         copy = detail::find_copy_in_task(detail::starpu_ttg_caller, &value);
@@ -2234,9 +2221,10 @@ namespace ttg_starpu {
         set_arg_local_impl<i>(*it, value, copy, &task_ring);
       }
       /* submit all ready tasks at once */
-      if (nullptr != task_ring) {
-        starpu_task_t *vp_task_ring[1] = { task_ring };
-        //__parsec_schedule_vp(world.impl().execution_stream(), vp_task_ring, 0);
+      if (!task_ring.empty()) {
+        for (auto *task_ptr : task_ring) {
+          starpu_task_submit(task_ptr);
+        }
       }
 
     }
