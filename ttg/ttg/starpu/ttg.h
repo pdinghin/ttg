@@ -810,7 +810,7 @@ namespace ttg_starpu {
     template <typename TT>
     struct StarPUTTBase {
      protected:
-      struct starpu_codelet starpu_tt_cl;
+      starpu_codelet_t starpu_tt_cl;
       std::unique_ptr<starpu_hash_table<TT>> tasks_table;
       std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
@@ -1905,7 +1905,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        //this->task_constraint_table.starpu_hash_table_insert(hk, task);
+        this->task_constraint_table.starpu_hash_table_insert(hk, task);
       }
       return !constrained;
     }

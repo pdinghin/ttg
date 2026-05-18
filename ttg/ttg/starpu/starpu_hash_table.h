@@ -22,6 +22,12 @@ namespace ttg_starpu {
         
         starpu_hash_table(): flat_map_t() {}
 
+        // Insert a task with a given key only  if there is no element in the table with an equivalent key.
+        // Return true if an insert took place.
+        bool starpu_hash_table_insert(starpu_key_t key, task_t* task){
+            return this->insert({key, task})
+        }
+
         //Visit an item if the key is present and apply func to it.
         //return true if the key is present, false otherwise.
         template <typename F>
