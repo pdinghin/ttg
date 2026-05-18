@@ -1905,7 +1905,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        this->task_constraint_table.starpu_hash_table_insert(hk, task);
+        this->task_constraint_table->starpu_hash_table_insert(hk, task);
       }
       return !constrained;
     }
@@ -1925,7 +1925,7 @@ namespace ttg_starpu {
         // no constraint blocked us
         task_t *task;
         starpu_key_t hk = 0;
-        task = this->tasks_constraint_table.starpu_hash_table_remove(hk,[](auto& item){return true;});
+        task = this->task_constraint_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
         assert(task != nullptr);
         auto &world_impl = world.impl();
         //starpu_execution_stream_t *es = world_impl.execution_stream();
@@ -1951,7 +1951,7 @@ namespace ttg_starpu {
         if (release) {
           // no constraint blocked this task, so go ahead and release
           auto hk = reinterpret_cast<starpu_key_t>(&key);
-          task = this->tasks_constraint_table.starpu_hash_table_remove(hk,[](auto& item){return true;});
+          task = this->task_constraint_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
           assert(task != nullptr);
           if (task_ring == nullptr) {
             /* the first task is set directly */
