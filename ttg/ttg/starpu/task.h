@@ -131,10 +131,8 @@ namespace ttg_starpu {
 
       void init_codelet_arg() {
         if (starpu_task) {
-          auto *self = this;
-          std::memcpy(&task_cl_arg, &self, sizeof(self));
-          starpu_task->cl_arg = &task_cl_arg;
-          starpu_task->cl_arg_size = sizeof(task_cl_arg);
+          starpu_task->cl_arg = this;
+          starpu_task->cl_arg_size = sizeof(this);
         }
       }
 
