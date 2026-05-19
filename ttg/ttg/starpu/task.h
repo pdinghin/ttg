@@ -8,8 +8,11 @@
 #include <array>
 #include <atomic>
 #include <cstring>
+#include <cassert>
+
 
 #define MAX_PARAM_COUNT 16  // Maximum number of task parameters
+typedef uintptr_t starpu_key_t;
 
 namespace ttg_starpu {
 
@@ -89,12 +92,6 @@ namespace ttg_starpu {
     /* Task hook return type for StarPU */
     using starpu_static_op_t = int (*)(void *);
 
-    /* Base task structure for StarPU-based TTG tasks
-     * 
-     * TODO: StarPU task integration. Currently a thin wrapper that maintains
-     * compatibility with existing TTG patterns. Full StarPU task submission
-     * and scheduling will be implemented when StarPU integration is finalized.
-     */
     struct starpu_ttg_task_base_t {
       starpu_task_t *starpu_task = nullptr;  // Pointer to StarPU task (when submitted)
       int32_t in_data_count = 0;             //< number of satisfied inputs
@@ -130,10 +127,9 @@ namespace ttg_starpu {
       }
 
       void init_codelet_arg() {
-        if (starpu_task) {
-          starpu_task->cl_arg = this;
-          starpu_task->cl_arg_size = sizeof(this);
-        }
+        assert(starpu_task);
+        starpu_task->cl_arg = this;
+        starpu_task->cl_arg_size = sizeof(this);
       }
 
     public:
@@ -148,9 +144,7 @@ namespace ttg_starpu {
       ttg_starpu_data_flags data_flags;
 
       void release_task() {
-        if (release_task_cb) {
-          release_task_cb(this);
-        }
+        release_task_cb(this);
       }
 
     protected:
@@ -224,14 +218,12 @@ namespace ttg_starpu {
 
       template<ttg::ExecutionSpace Space>
       int invoke_op() {
-        // TODO: Implement StarPU task invoke_op
-        // if constexpr (Space == ttg::ExecutionSpace::Host) {
-        //   return TT::static_op(this);
-        // }
-        return 0;  // Placeholder
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return TT::static_op(this);
+        }
       }
 
-      uint64_t pkey() { return 0; }
+      starpu_key_t pkey() { return reinterpret_cast<starpu_key_t>(&key); }
       device_state_t<TT::derived_has_device_op()> dev_state;
     };
 
@@ -273,11 +265,12 @@ namespace ttg_starpu {
 
       template<ttg::ExecutionSpace Space>
       int invoke_op() {
-        // TODO: Implement StarPU task invocation
-        return 0;  // Placeholder
+        if constexpr (Space == ttg::ExecutionSpace::Host) {
+          return TT::static_op(&this->starpu_task);
+        }
       }
 
-      uint64_t pkey() { return 0; }
+      starpu_key_t pkey() { return 0; }
       device_state_t<TT::derived_has_device_op()> dev_state;
     };
 
@@ -295,8 +288,7 @@ namespace ttg_starpu {
       }
 
       static void release_task(starpu_ttg_task_base_t* task_base) {
-        // TODO: Implement StarPU reducer task execution
-        // For now, this is a placeholder
+        starpu_task_submit(task_base->starpu_task);
       }
     };
 

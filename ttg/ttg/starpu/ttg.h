@@ -1689,10 +1689,10 @@ namespace ttg_starpu {
       int32_t priority = 0;
       task_t* newtask = [&]() -> task_t* {
         if constexpr (!keyT_is_Void) {
-          //apply priomap with key
+          priority = priomap(key);
           return new task_t(key, priority, this);
         } else {
-          //apply priomap without key
+          priority = priomap();
           return new task_t(priority, this);
         }
       }();
