@@ -219,7 +219,7 @@ namespace ttg_starpu {
       template<ttg::ExecutionSpace Space>
       int invoke_op() {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
-          return TT::static_op(this);
+          return TT::static_op(&this->starpu_task);
         }
       }
 
