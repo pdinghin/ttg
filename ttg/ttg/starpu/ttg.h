@@ -1115,7 +1115,7 @@ namespace ttg_starpu {
         }
       }
 
-      return 0;//PA_HOOK_RETURN_DONE
+      return STARPU_HOOK_RETURN_DONE;
     }
 
     static starpu_hook_return_t static_op_noarg(starpu_task_t *starpu_task) {
