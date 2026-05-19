@@ -187,6 +187,10 @@ namespace ttg_starpu {
       key_type key;
       static constexpr size_t num_streams = TT::numins;
       std::array<stream_info_t, num_streams> streams;
+#ifdef TTG_HAVE_COROUTINE
+      void* suspended_task_address = nullptr;  // if not null the function is suspended
+      ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
+#endif
       ttg_data_copy_t *copies[num_streams] = { nullptr };
 
       
@@ -219,7 +223,7 @@ namespace ttg_starpu {
       template<ttg::ExecutionSpace Space>
       int invoke_op() {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
-          return TT::static_op(&this->starpu_task);
+          return TT::static_op(this->starpu_task);
         }
       }
 
@@ -234,6 +238,10 @@ namespace ttg_starpu {
       TT* tt = nullptr;
 
       std::array<stream_info_t, num_streams> streams;
+#ifdef TTG_HAVE_COROUTINE
+      void* suspended_task_address = nullptr;  // if not null the function is suspended
+      ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
+#endif
       ttg_data_copy_t *copies[num_streams + 1] = { nullptr };
 
       starpu_ttg_task_t() = default;
@@ -266,7 +274,7 @@ namespace ttg_starpu {
       template<ttg::ExecutionSpace Space>
       int invoke_op() {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
-          return TT::static_op(&this->starpu_task);
+          return TT::static_op(this->starpu_task);
         }
       }
 
