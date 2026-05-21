@@ -93,7 +93,7 @@ namespace ttg_starpu {
     using starpu_static_op_t = int (*)(void *);
 
     struct starpu_ttg_task_base_t {
-      starpu_task_t *starpu_task = nullptr;  // Pointer to StarPU task (when submitted)
+      starpu_task_t *starpu_task;  // Pointer to StarPU task (when submitted)
       int32_t in_data_count = 0;             //< number of satisfied inputs
       int32_t data_count = 0;                //< number of data elements in the copies array
       ttg_data_copy_t **copies;              //< pointer to the fixed copies array of the derived task
@@ -186,12 +186,14 @@ namespace ttg_starpu {
       TT* tt = nullptr;
       key_type key;
       static constexpr size_t num_streams = TT::numins;
+      static constexpr size_t num_copies  = TT::derived_has_device_op() ? static_cast<size_t>(MAX_PARAM_COUNT)
+                                                                    : (num_streams+1);
       std::array<stream_info_t, num_streams> streams;
 #ifdef TTG_HAVE_COROUTINE
       void* suspended_task_address = nullptr;  // if not null the function is suspended
       ttg::TaskCoroutineID coroutine_id = ttg::TaskCoroutineID::Invalid;
 #endif
-      ttg_data_copy_t *copies[num_streams] = { nullptr };
+      ttg_data_copy_t *copies[num_copies] = { nullptr };
 
       
       starpu_ttg_task_t( TT *tt_ptr)

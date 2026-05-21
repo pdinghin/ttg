@@ -814,8 +814,8 @@ namespace ttg_starpu {
       std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
       StarPUTTBase() 
-        : tasks_table(),
-          task_constraint_table()
+        : tasks_table(std::make_unique<starpu_hash_table<TT>>()),
+          task_constraint_table(std::make_unique<starpu_hash_table<TT>>())
       {
         starpu_tt_cl.where = STARPU_CPU;
         starpu_tt_cl.cpu_funcs[0] = &detail::hook<TT>;
@@ -825,6 +825,7 @@ namespace ttg_starpu {
 
       ~StarPUTTBase() {
         //TODO: make sure all tasks have completed before we destroy the task tables
+        starpu_task_wait_for_all();
       }
     };
 
@@ -846,8 +847,6 @@ namespace ttg_starpu {
     static_assert(ttg::meta::is_none_Void_v<input_valueTs>, "ttg::Void is for internal use only, do not use it");
 
     //parsec_mempool_t mempools;
-
-    // check for a non-type member named have_cuda_op
 
     bool alive = true;
 
