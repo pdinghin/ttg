@@ -185,10 +185,6 @@ namespace ttg_starpu {
       ttg::trace("ttg_starpu: send_active_message stub (owner=", owner, ")");
     }
 
-    inline void enumerate_starpu_data_copy( auto&& value, auto&& callback ) {
-      (void)value;
-      (void)callback;
-    }
 
   }  // namespace detail
 
@@ -494,9 +490,8 @@ namespace ttg_starpu {
     template<typename T>
     inline void transfer_ownership_impl(T&& arg, int device) {
       if constexpr(!std::is_const_v<std::remove_reference_t<T>>) {
-        detail::enumerate_starpu_data_copy(arg, [&](auto *data){
-          (void)data;
-          (void)device;
+        detail::foreach_starpu_data(arg, [&](auto *data){
+          //TODO: Implement equivalent parsec_data_transfer_ownership_to_copy for starpu
         });
       }
     }
@@ -1463,9 +1458,8 @@ namespace ttg_starpu {
                   std::move(keylist), copy, num_iovecs, [this, &val](std::vector<keyT> &&keylist, detail::ttg_data_copy_t *copy) {
                     set_arg_from_msg_keylist<i, decvalueT>(keylist, copy);
                     this->world.impl().decrement_inflight_msg();
-                    detail::enumerate_starpu_data_copy(val, [&](auto *data){
+                    detail::foreach_starpu_data(val, [&](auto *data){
                       // TODO: decrement reader counter on equivalent StarPU data copy.
-                      (void)data;
                     });
                     copy->drop_ref();
                   });
@@ -1555,13 +1549,13 @@ namespace ttg_starpu {
               }
             } else if constexpr (!ttg::has_split_metadata<decvalueT>::value) {
               if (inline_data) {
-                detail::enumerate_starpu_data_copy(val, [&](auto *data){
+                detail::foreach_starpu_data(val, [&](auto *data){
                   read_inline_data(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private});
                 });
               } else {
                 auto activation = create_activation_fn();
-                detail::enumerate_starpu_data_copy(val, [&](auto *data){
-                  (void)data;
+                detail::foreach_starpu_data(val, [&](auto *data){
+                  //TODO: increment reader counter on equivalent StarPU data copy.
                   handle_iovec_fn(ttg::iovec{data->nb_elts, data->device_copies[data->owner_device]->device_private}, activation);
                 });
               }

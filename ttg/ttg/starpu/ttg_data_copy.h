@@ -72,18 +72,18 @@ namespace ttg_starpu {
       ttg_data_copy_t(ttg_data_copy_t&& c)
       : ttg_data_copy_self_t(this)
       , m_next_task(c.m_next_task)
-      , m_readers(c.m_readers.load(std::memory_order_relaxed))
+      , m_readers(c.m_readers)
       , m_refs(c.m_refs.load(std::memory_order_relaxed))
       {
-        c.m_readers.store(0, std::memory_order_relaxed);
+        c.m_readers = 0;
       }
 
       ttg_data_copy_t& operator=(ttg_data_copy_t&& c)
       {
         m_next_task = c.m_next_task;
         c.m_next_task = nullptr;
-        m_readers.store(c.m_readers.load(std::memory_order_relaxed), std::memory_order_relaxed);
-        c.m_readers.store(0, std::memory_order_relaxed);
+        m_readers = c.m_readers;
+        c.m_readers = 0;
         m_refs.store(c.m_refs.load(std::memory_order_relaxed), std::memory_order_relaxed);
         c.m_refs.store(0, std::memory_order_relaxed);
         return *this;
@@ -102,12 +102,12 @@ namespace ttg_starpu {
 
       /* Returns true if the copy is mutable */
       bool is_mutable() const {
-        return m_readers.load(std::memory_order_relaxed) == mutable_tag;
+        return m_readers == mutable_tag;
       }
 
       /* Mark the copy as mutable */
       void mark_mutable() {
-        m_readers.store(mutable_tag, std::memory_order_relaxed);
+        m_readers = mutable_tag;
       }
 
       /* Increment the reader counter and return previous value
@@ -116,11 +116,9 @@ namespace ttg_starpu {
       template<bool Atomic = true>
       int increment_readers() {
         if constexpr(Atomic) {
-          return m_readers.fetch_add(1, std::memory_order_relaxed);
+          return __atomic_fetch_add(&m_readers, 1, __ATOMIC_ACQ_REL);
         } else {
-          int val = m_readers.load(std::memory_order_relaxed);
-          m_readers.store(val + 1, std::memory_order_relaxed);
-          return val;
+          return m_readers++;
         }
       }
 
@@ -128,9 +126,8 @@ namespace ttg_starpu {
       * Reset the number of readers to read-only with a single reader.
       */
       void reset_readers() {
-        int current = m_readers.load(std::memory_order_relaxed);
-        if (mutable_tag == current) {
-          m_readers.store(1, std::memory_order_relaxed);
+        if (mutable_tag == m_readers) {
+          m_readers = 1;
         }
       }
 
@@ -140,18 +137,16 @@ namespace ttg_starpu {
       template<bool Atomic = true>
       int decrement_readers() {
         if constexpr(Atomic) {
-          return m_readers.fetch_sub(1, std::memory_order_relaxed);
+          return __atomic_fetch_sub(&m_readers, 1, __ATOMIC_ACQ_REL);
         } else {
-          int val = m_readers.load(std::memory_order_relaxed);
-          m_readers.store(val - 1, std::memory_order_relaxed);
-          return val;
+          return m_readers --;
         }
       }
 
       /* Returns the number of readers if the copy is immutable, or \c mutable_tag
       * if the copy is mutable */
       int num_readers() const {
-        return m_readers.load(std::memory_order_relaxed);
+        return m_readers;
       }
 
       /* Returns the pointer to the user data wrapped by the the copy object */
@@ -184,7 +179,7 @@ namespace ttg_starpu {
 
     protected:
       starpu_task_t *m_next_task = nullptr;
-      std::atomic<int32_t>  m_readers  = 1;
+      int32_t     m_readers  = 1;
       std::atomic<int32_t>  m_refs = 1;                     //< number of entities referencing this copy (TTGs, external)
     };
 
