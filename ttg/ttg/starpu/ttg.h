@@ -3327,38 +3327,38 @@ namespace ttg_starpu {
     //   int rank;
     //   MPI_Comm_rank(MPI_COMM_WORLD, &rank);
     //   ttg::trace("ttg_starpu(", rank, ") Inserting into static_id_to_op_map at ", get_instance_id());
-    //   static_set_arg_fct_call_t call = std::make_pair(&TT::static_set_arg, this);
-      auto &world_impl = world.impl();
-      static_map_mutex.lock();
-      static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
-      if (delayed_unpack_actions.count(get_instance_id()) > 0) {
-        auto tp = world_impl.taskpool();
+      // static_set_arg_fct_call_t call = std::make_pair(&TT::static_set_arg, this);
+      // auto &world_impl = world.impl();
+      // static_map_mutex.lock();
+      // static_id_to_op_map.insert(std::make_pair(get_instance_id(), call));
+      // if (delayed_unpack_actions.count(get_instance_id()) > 0) {
+      //   auto tp = world_impl.taskpool();
 
-        ttg::trace("ttg_starpu(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()),
-                   " messages delayed with op_id ", get_instance_id());
+      //   // ttg::trace("ttg_starpu(", rank, ") There are ", delayed_unpack_actions.count(get_instance_id()),
+      //   //            " messages delayed with op_id ", get_instance_id());
 
-        auto se = delayed_unpack_actions.equal_range(get_instance_id());
-        std::vector<static_set_arg_fct_arg_t> tmp;
-        for (auto it = se.first; it != se.second;) {
-          assert(it->first == get_instance_id());
-          tmp.push_back(std::move(it->second));
-          it = delayed_unpack_actions.erase(it);
-        }
-        static_map_mutex.unlock();
+      //   auto se = delayed_unpack_actions.equal_range(get_instance_id());
+      //   std::vector<static_set_arg_fct_arg_t> tmp;
+      //   for (auto it = se.first; it != se.second;) {
+      //     assert(it->first == get_instance_id());
+      //     tmp.push_back(std::move(it->second));
+      //     it = delayed_unpack_actions.erase(it);
+      //   }
+      //   static_map_mutex.unlock();
 
-        // for (auto& it : tmp) {
-        //   if(ttg::tracing())
-        //     ttg::print("ttg_starpu(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
-        //                std::get<1>(it).get(), ", ", std::get<2>(it), ")");
-        //   // int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
-        //   //                                    std::get<0>(it), NULL);
-        //   // assert(rc == 0);
-        // }
+      //   // for (auto& it : tmp) {
+      //   //   if(ttg::tracing())
+      //   //     ttg::print("ttg_starpu(", rank, ") Unpacking delayed message (", ", ", get_instance_id(), ", ",
+      //   //                std::get<1>(it).get(), ", ", std::get<2>(it), ")");
+      //   //   // int rc = detail::static_unpack_msg(&parsec_ce, world_impl.parsec_ttg_tag(), std::get<1>(it).get(), std::get<2>(it),
+      //   //   //                                    std::get<0>(it), NULL);
+      //   //   // assert(rc == 0);
+      //   // }
 
-        tmp.clear();
-      } else {
-        static_map_mutex.unlock();
-      }
+      //   tmp.clear();
+      // } else {
+      //   static_map_mutex.unlock();
+      // }
     }
   };
 
