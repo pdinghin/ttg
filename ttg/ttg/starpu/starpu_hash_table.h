@@ -7,7 +7,7 @@
 #include <boost/unordered/concurrent_flat_map.hpp>
 #include <starpu.h>
 
-typedef uintptr_t starpu_key_t;
+
 
 namespace ttg_starpu {
 
@@ -37,6 +37,13 @@ namespace ttg_starpu {
             });
         }
         
+        //Apply func to all items in the table.
+        template <typename F>
+        void starpu_hash_table_visit_all(F func, void* cb_data){
+            this->visit_all([&](auto& item){
+                func(item.second, cb_data);
+            });
+        }
         //Emplace an item if the key is not present, otherwise visit the item and apply func to it.
         template <typename F>
         bool starpu_hash_table_emplace_or_visit(starpu_key_t key, F &&func, task_t*&& new_task){
