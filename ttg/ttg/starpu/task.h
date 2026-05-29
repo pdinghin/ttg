@@ -227,6 +227,7 @@ namespace ttg_starpu {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
           return TT::static_op(reinterpret_cast<starpu_task_t*>(this));
         }
+        return -1; // Not supported
       }
 
       starpu_key_t pkey() { return reinterpret_cast<starpu_key_t>(&key); }
@@ -278,6 +279,7 @@ namespace ttg_starpu {
         if constexpr (Space == ttg::ExecutionSpace::Host) {
           return TT::static_op(reinterpret_cast<starpu_task_t*>(this));
         }
+        return -1; // Not supported
       }
 
       starpu_key_t pkey() { return 0; }
