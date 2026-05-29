@@ -812,8 +812,8 @@ namespace ttg_starpu {
       std::unique_ptr<starpu_hash_table<TT, hashtable_keyT>> task_constraint_table;
 
       StarPUTTBase() 
-        : tasks_table(std::make_unique<starpu_hash_table<TT, hashtable_keyT>>()),
-          task_constraint_table(std::make_unique<starpu_hash_table<TT, hashtable_keyT>>())
+        : tasks_table(std::make_unique<starpu_hash_table<TT, hashtable_keyT,ttg::hash<hashtable_keyT>>>()),
+          task_constraint_table(std::make_unique<starpu_hash_table<TT, hashtable_keyT,ttg::hash<hashtable_keyT>>>())
       {
       }
 
