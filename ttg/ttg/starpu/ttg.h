@@ -803,7 +803,11 @@ namespace ttg_starpu {
     template <typename TT>
     struct StarPUTTBase {
      protected:
-      starpu_codelet_t starpu_tt_cl;
+      starpu_codelet_t starpu_tt_cl = {
+        .where = STARPU_CPU,
+        .cpu_funcs = {detail::hook<TT>},
+        .nbuffers = 0
+      };
       std::unique_ptr<starpu_hash_table<TT>> tasks_table;
       std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
 
@@ -811,9 +815,6 @@ namespace ttg_starpu {
         : tasks_table(std::make_unique<starpu_hash_table<TT>>()),
           task_constraint_table(std::make_unique<starpu_hash_table<TT>>())
       {
-        starpu_tt_cl.where = STARPU_CPU;
-        starpu_tt_cl.cpu_funcs[0] = &detail::hook<TT>;
-        starpu_tt_cl.nbuffers = 0;
       }
 
 
@@ -1024,7 +1025,7 @@ namespace ttg_starpu {
 
       task_t *task = (task_t*)starpu_task;
       void* suspended_task_address =
-#ifdef TTG_HAVE_COROUTINE
+      #ifdef TTG_HAVE_COROUTINE
         task->suspended_task_address;  // non-null = need to resume the task
 #else  // TTG_HAVE_COROUTINE
         nullptr;
@@ -1735,13 +1736,12 @@ namespace ttg_starpu {
 
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
-
+      
       starpu_key_t hk = 0;
       if constexpr (!keyT_is_Void) {
         hk = reinterpret_cast<starpu_key_t>(&key);
         assert(keymap(key) == world.rank());
       }
-
       task_t *task;
       auto &world_impl = world.impl();
       auto &reducer = std::get<i>(input_reducers);
@@ -1873,7 +1873,7 @@ namespace ttg_starpu {
         callback_fn(task);
         task->remove_from_hash = false;
       }
-      
+      //std::cout << "KEY: " << key << "goal: " << task->in_data_count << std::endl;
       if (release) {
         release_task(task, task_ring);
       }
