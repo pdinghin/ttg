@@ -12,11 +12,11 @@
 namespace ttg_starpu {
 
 
-    template <typename TT, typename hashtable_keyT>
-    class starpu_hash_table : public boost::unordered::concurrent_flat_map<hashtable_keyT, detail::starpu_ttg_task_t<TT>*, ttg::hash<hashtable_keyT>> {
+    template <typename TT, typename hashtable_keyT, typename Hash = ttg::hash<hashtable_keyT>>
+    class starpu_hash_table : public boost::unordered::concurrent_flat_map<hashtable_keyT, detail::starpu_ttg_task_t<TT>*, Hash> {
         private:
         using task_t = detail::starpu_ttg_task_t<TT>;
-        using flat_map_t = boost::unordered::concurrent_flat_map<hashtable_keyT, task_t*, ttg::hash<hashtable_keyT>>;
+        using flat_map_t = boost::unordered::concurrent_flat_map<hashtable_keyT, task_t*, Hash>;
 
         public:
         
