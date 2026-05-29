@@ -12,11 +12,11 @@
 namespace ttg_starpu {
 
 
-    template <typename TT>
-    class starpu_hash_table : public boost::unordered::concurrent_flat_map<starpu_key_t, detail::starpu_ttg_task_t<TT>*> {
+    template <typename TT, typename hashtable_keyT>
+    class starpu_hash_table : public boost::unordered::concurrent_flat_map<hashtable_keyT, detail::starpu_ttg_task_t<TT>*> {
         private:
         using task_t = detail::starpu_ttg_task_t<TT>;
-        using flat_map_t = boost::unordered::concurrent_flat_map<starpu_key_t, task_t*>;
+        using flat_map_t = boost::unordered::concurrent_flat_map<hashtable_keyT, task_t*>;
 
         public:
         
@@ -24,14 +24,14 @@ namespace ttg_starpu {
 
         // Insert a task with a given key only  if there is no element in the table with an equivalent key.
         // Return true if an insert took place.
-        bool starpu_hash_table_insert(starpu_key_t key, task_t* task){
+        bool starpu_hash_table_insert(hashtable_keyT key, task_t* task){
             return this->insert({key, task});
         }
 
         //Visit an item if the key is present and apply func to it.
         //return true if the key is present, false otherwise.
         template <typename F>
-        bool starpu_hash_table_visit(starpu_key_t key, F func){
+        bool starpu_hash_table_visit(hashtable_keyT key, F func){
             return this->visit(key, [&](auto& item){
                 func(item.second);
             });
@@ -46,7 +46,7 @@ namespace ttg_starpu {
         }
         //Emplace an item if the key is not present, otherwise visit the item and apply func to it.
         template <typename F>
-        bool starpu_hash_table_emplace_or_visit(starpu_key_t key, F &&func, task_t*&& new_task){
+        bool starpu_hash_table_emplace_or_visit(hashtable_keyT key, F &&func, task_t*&& new_task){
             return this->emplace_or_visit(key, new_task, [&](auto& item){
                 func(item.second);
             });
@@ -54,7 +54,7 @@ namespace ttg_starpu {
 
         //Emplace an item if the key is not present and apply F1 to it, otherwise visit the item and apply F2 to it.
         template <typename F1, typename F2>
-        bool starpu_hash_table_try_emplace_and_visit(starpu_key_t starpu_key, F1 &&func_new, F2 &&func_visit){
+        bool starpu_hash_table_try_emplace_and_visit(hashtable_keyT starpu_key, F1 &&func_new, F2 &&func_visit){
             return this->try_emplace_and_visit(starpu_key, [&](auto& item){ item.second = func_new(); }, [&](auto& item){ func_visit(item.second); });
         }
 
@@ -62,7 +62,7 @@ namespace ttg_starpu {
         // Returns deleted item pointer.
         //TODO : Need to delete task later
         template <typename F, typename... Args>
-        task_t* starpu_hash_table_remove(starpu_key_t key,F &&func, Args&&... args){
+        task_t* starpu_hash_table_remove(hashtable_keyT key,F &&func, Args&&... args){
             task_t* task = nullptr;
             this->erase_if(key, [&](auto& item){
                 if(func(item.second,std::forward<Args>(args)...)){

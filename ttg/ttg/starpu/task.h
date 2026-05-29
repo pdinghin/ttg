@@ -12,7 +12,7 @@
 
 
 #define MAX_PARAM_COUNT 16  // Maximum number of task parameters
-typedef uintptr_t starpu_key_t;
+
 
 namespace ttg_starpu {
 
@@ -230,13 +230,14 @@ namespace ttg_starpu {
         return -1; // Not supported
       }
 
-      starpu_key_t pkey() { return reinterpret_cast<starpu_key_t>(&key); }
+      key_type pkey() { return key; }
       device_state_t<TT::derived_has_device_op()> dev_state;
     };
 
     /* Streaming task specialization */
     template <typename TT>
     struct starpu_ttg_task_t<TT, true> : public starpu_ttg_task_base_t {
+      using key_type = typename TT::key_type;
       static constexpr size_t num_streams = TT::numins;
       TT* tt = nullptr;
 
@@ -282,7 +283,7 @@ namespace ttg_starpu {
         return -1; // Not supported
       }
 
-      starpu_key_t pkey() { return 0; }
+      key_type pkey() { return 0; }
       device_state_t<TT::derived_has_device_op()> dev_state;
     };
 

@@ -343,9 +343,8 @@ namespace ttg_starpu {
     virtual void fence_impl(void) override {
       int rank = this->rank();
 
+      starpu_task_wait_for_all();
       // MPI_Barrier(comm());
-
-      execute();
     }
 
    private: 
@@ -800,34 +799,34 @@ namespace ttg_starpu {
   }
 
   namespace detail {
-    template <typename TT>
+    template <typename TT, typename keyT>
     struct StarPUTTBase {
-     protected:
+      using hashtable_keyT = std::conditional_t<ttg::meta::is_void_v<keyT>,int,keyT>;
+    protected:
       starpu_codelet_t starpu_tt_cl = {
         .where = STARPU_CPU,
         .cpu_funcs = {detail::hook<TT>},
         .nbuffers = 0
       };
-      std::unique_ptr<starpu_hash_table<TT>> tasks_table;
-      std::unique_ptr<starpu_hash_table<TT>> task_constraint_table;
+      std::unique_ptr<starpu_hash_table<TT, hashtable_keyT>> tasks_table;
+      std::unique_ptr<starpu_hash_table<TT, hashtable_keyT>> task_constraint_table;
 
       StarPUTTBase() 
-        : tasks_table(std::make_unique<starpu_hash_table<TT>>()),
-          task_constraint_table(std::make_unique<starpu_hash_table<TT>>())
+        : tasks_table(std::make_unique<starpu_hash_table<TT, hashtable_keyT>>()),
+          task_constraint_table(std::make_unique<starpu_hash_table<TT, hashtable_keyT>>())
       {
       }
 
 
       ~StarPUTTBase() {
-        //TODO: make sure all tasks have completed before we destroy the task tables
-        starpu_task_wait_for_all();
+        
       }
     };
 
   }  // namespace detail
 
   template <typename keyT, typename output_terminalsT, typename derivedT, typename input_valueTs, ttg::ExecutionSpace Space>
-  class TT : public ttg::TTBase, detail::StarPUTTBase<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>> {
+  class TT : public ttg::TTBase, detail::StarPUTTBase<TT<keyT, output_terminalsT, derivedT, input_valueTs, Space>,keyT> {
    private:
     /// preconditions
     static_assert(ttg::meta::is_typelist_v<input_valueTs>,
@@ -858,7 +857,7 @@ namespace ttg_starpu {
     }
 
     using ttT = TT;
-    using key_type = keyT;
+    using key_type = std::conditional_t<ttg::meta::is_void_v<keyT>,int,keyT>;
     using input_terminals_type = ttg::detail::input_terminals_tuple_t<keyT, input_tuple_type>;
     using input_args_type = actual_input_tuple_type;
     using input_edges_type = ttg::detail::edges_tuple_t<keyT, ttg::meta::decayed_typelist_t<input_tuple_type>>;
@@ -1737,9 +1736,10 @@ namespace ttg_starpu {
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
       
-      starpu_key_t hk = 0;
-      if constexpr (!keyT_is_Void) {
-        hk = reinterpret_cast<starpu_key_t>(&key);
+      if constexpr (keyT_is_Void) {
+        key = 0;
+      }
+      else{
         assert(keymap(key) == world.rank());
       }
       task_t *task;
@@ -1851,7 +1851,7 @@ namespace ttg_starpu {
 
       if (numins > 1 || reducer) {
         
-        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(key, [&](){
           task = create_new_task(key);
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
@@ -1864,7 +1864,7 @@ namespace ttg_starpu {
           callback_fn(item);
         });
         if(to_remove) {
-          task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
+          task = this->tasks_table->starpu_hash_table_remove(key,[](auto& item){return true;});
           task->remove_from_hash = false;
         }
       } else {
@@ -1885,7 +1885,7 @@ namespace ttg_starpu {
       }
     }
 
-    bool check_constraints(task_t *task, starpu_key_t hk) {
+    bool check_constraints(task_t *task) {
       bool constrained = false;
       if (constraints_check.size() > 0) {
         if constexpr (ttg::meta::is_void_v<keyT>) {
@@ -1896,7 +1896,7 @@ namespace ttg_starpu {
       }
       if (constrained) {
         // store the task so we can later access it once it is released
-        this->task_constraint_table->starpu_hash_table_insert(hk, task);
+        this->task_constraint_table->starpu_hash_table_insert(task->pkey(), task);
       }
       return !constrained;
     }
@@ -1915,7 +1915,7 @@ namespace ttg_starpu {
       if (release) {
         // no constraint blocked us
         task_t *task;
-        starpu_key_t hk = 0;
+        key_type hk = 0;
         task = this->task_constraint_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
         assert(task != nullptr);
         auto &world_impl = world.impl();
@@ -1940,8 +1940,7 @@ namespace ttg_starpu {
 
         if (release) {
           // no constraint blocked this task, so go ahead and release
-          auto hk = reinterpret_cast<starpu_key_t>(&key);
-          task = this->task_constraint_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
+          task = this->task_constraint_table->starpu_hash_table_remove(key,[](auto& item){return true;});
           assert(task != nullptr);
           task_ring.push_back(&task->starpu_task);
         }
@@ -1973,7 +1972,7 @@ namespace ttg_starpu {
 
       if (count == numins) {
         //starpu_execution_stream_t *es = world_impl.execution_stream();
-        starpu_key_t hk = task->pkey();
+        key_type hk = task->pkey();
         if (tracing()) {
           if constexpr (!keyT_is_Void) {
             ttg::trace(world.rank(), ":", get_name(), " : ", task->key, ": submitting task for op ");
@@ -1983,7 +1982,7 @@ namespace ttg_starpu {
         }
         if (task->remove_from_hash) this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
 
-        if (check_constraints(task,hk)) {
+        if (check_constraints(task)) {
           if (nullptr == task_ring) {
             starpu_task_submit(task->starpu_task);
           } else {
@@ -2327,10 +2326,9 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), ":", key, " : setting stream size to ", size, " for terminal ", i);
 
-        auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task;
         //TODO: Verify if we need to put fetch_add/sub here
-        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(key, [&](){
           task = create_new_task(key);
           world.impl().increment_created();
           return task;
@@ -2379,7 +2377,7 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : setting stream size to ", size, " for terminal ", i);
 
-        starpu_key_t hk = 0;
+        key_type hk = 0;
         task_t *task;
         this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
           task = create_new_task(ttg::Void{});
@@ -2428,10 +2426,8 @@ namespace ttg_starpu {
         // detail::send_active_message(owner, msg.get(), sizeof(msg_header_t) + pos);
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
-
-        auto hk = reinterpret_cast<starpu_key_t>(&key);
         task_t *task = nullptr;
-        if(!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
+        if(!this->tasks_table->starpu_hash_table_visit(key, [&](auto& item) {
           task = item;
         })){
           ttg::print_error(world.rank(), ":", get_name(), " : error finalize called on stream that never received an input data: ", i);
@@ -2476,7 +2472,7 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), ": finalizing stream for terminal ", i);
 
-        auto hk = static_cast<starpu_key_t>(0);
+        key_type hk = 0;
         task_t *task = nullptr;
         if (!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
               task = item;
@@ -2775,7 +2771,7 @@ namespace ttg_starpu {
 
     void fence() override { ttg::default_execution_context().impl().fence(); }
 
-    static int key_equal(starpu_key_t a, starpu_key_t b, void *user_data) {
+    static int key_equal(key_type a, key_type b, void *user_data) {
       if constexpr (std::is_same_v<keyT, void>) {
         return 1;
       } else {
@@ -2785,7 +2781,7 @@ namespace ttg_starpu {
       }
     }
 
-    static uint64_t key_hash(starpu_key_t k, void *user_data) {
+    static uint64_t key_hash(key_type k, void *user_data) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       if constexpr (keyT_is_Void || std::is_same_v<keyT, void>) {
         return 0;
@@ -2797,7 +2793,7 @@ namespace ttg_starpu {
       }
     }
 
-    static char *key_print(char *buffer, size_t buffer_size, starpu_key_t k, void *user_data) {
+    static char *key_print(char *buffer, size_t buffer_size, key_type k, void *user_data) {
       if constexpr (std::is_same_v<keyT, void>) {
         buffer[0] = '\0';
         return buffer;
