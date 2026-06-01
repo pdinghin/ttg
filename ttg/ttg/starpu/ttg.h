@@ -1742,7 +1742,7 @@ namespace ttg_starpu {
       else{
         assert(keymap(key) == world.rank());
       }
-      task_t *task;
+      task_t *task = nullptr;
       auto &world_impl = world.impl();
       auto &reducer = std::get<i>(input_reducers);
       bool release = false;
@@ -1862,6 +1862,7 @@ namespace ttg_starpu {
             to_remove = true;
           }
           callback_fn(item);
+	  task = item;
         });
         if(to_remove) {
           task = this->tasks_table->starpu_hash_table_remove(key,[](auto& item){return true;});

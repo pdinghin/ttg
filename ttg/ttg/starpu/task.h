@@ -151,14 +151,16 @@ namespace ttg_starpu {
       /* Protected constructors: this class should not be instantiated directly
        * but always be used through starpu_ttg_task_t. */
 
-      starpu_ttg_task_base_t(int data_count, ttg_data_copy_t **copies,
+      starpu_ttg_task_base_t(int data_count, ttg_data_copy_t **copies, release_task_fn *release_fn,
                             bool defer_writer_flag = true)
         : data_count(data_count)
         , copies(copies)
+	, release_task_cb(release_fn)
         , defer_writer(defer_writer_flag)
       {
         starpu_task = starpu_task_create();
         init_codelet_arg();
+	std::cerr << static_cast<void*>(this) << "->" << static_cast<void*>(starpu_task) << std::endl;
       }
 
       starpu_ttg_task_base_t(int32_t priority, int data_count, 
@@ -172,6 +174,8 @@ namespace ttg_starpu {
       {
         starpu_task = starpu_task_create();
         init_codelet_arg();
+std::cerr << static_cast<void*>(this) << "->" << static_cast<void*>(starpu_task) << std::endl;
+
       }
 
     public:
@@ -197,7 +201,7 @@ namespace ttg_starpu {
 
       
       starpu_ttg_task_t( TT *tt_ptr)
-        : starpu_ttg_task_base_t(num_streams, copies)
+        : starpu_ttg_task_base_t(num_streams, copies,&release_task)
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
@@ -251,7 +255,7 @@ namespace ttg_starpu {
       starpu_ttg_task_t() = default;
 
       starpu_ttg_task_t( TT *tt_ptr)
-        : starpu_ttg_task_base_t(num_streams, copies)
+        : starpu_ttg_task_base_t(num_streams, copies,&release_task)
         , tt(tt_ptr)
       {
         this->dev_ptr = this->dev_state.dev_ptr();
