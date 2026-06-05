@@ -639,13 +639,13 @@ namespace ttg_starpu {
            * of the task
            */
           assert(nullptr == copy_in->get_next_task());
-          copy_in->set_next_task(task->starpu_task);
+          copy_in->set_next_task(reinterpret_cast<starpu_task_t *>(task));
           std::atomic_thread_fence(std::memory_order_release);
           copy_in->mark_mutable();
         } else {
           if (defer_writer && nullptr == copy_in->get_next_task()) {
             /* we're the first writer and want to wait for all readers to complete */
-            copy_res->set_next_task(task->starpu_task);
+            copy_res->set_next_task(reinterpret_cast<starpu_task_t *>(task));
             task->defer_writer = true;
           } else {
             /* there are writers and/or waiting already of this copy already, make a copy that we can mutate */
