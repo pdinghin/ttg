@@ -1807,7 +1807,7 @@ namespace ttg_starpu {
               /* release the task if we're not deferred
               * TODO: can we delay that until we get the second value?
               */
-              if (copy->get_next_task() != reduce_task->starpu_task) {
+              if (copy->get_next_task() != reinterpret_cast<starpu_task_t*>(reduce_task)) {
                 reduce_task->release_task(reduce_task);
               }
 
@@ -1840,7 +1840,7 @@ namespace ttg_starpu {
             /* if we registered as a writer and were the first to register with this copy
             * we need to defer the release of this task to give other tasks a chance to
             * make a copy of the original data */
-            release = (copy->get_next_task() != task->starpu_task);
+            release = (copy->get_next_task() != reinterpret_cast<starpu_task_t*>(task));
             task->copies[i] = copy;
           } else {
             release = true;
@@ -1862,7 +1862,7 @@ namespace ttg_starpu {
             to_remove = true;
           }
           callback_fn(item);
-	  task = item;
+	        task = item;
         });
         if(to_remove) {
           task = this->tasks_table->starpu_hash_table_remove(key,[](auto& item){return true;});
@@ -1874,7 +1874,6 @@ namespace ttg_starpu {
         callback_fn(task);
         task->remove_from_hash = false;
       }
-      //std::cout << "KEY: " << key << "goal: " << task->in_data_count << std::endl;
       if (release) {
         release_task(task, task_ring);
       }
@@ -2840,7 +2839,7 @@ namespace ttg_starpu {
 
     static starpu_hook_return_t complete_task_and_release(void *es, starpu_task_t *starpu_task) {
 
-      //std::cout << "complete_task_and_release: task " << parsec_task << std::endl;
+      //std::cout << "complete_task_and_release: task " << starpu_task << std::endl;
 
       task_t *task = (task_t*)starpu_task;
 
