@@ -9,7 +9,6 @@ namespace ttg_starpu::detail {
   
   template<typename Value, typename Fn>
   void foreach_starpu_data(Value&& value, Fn&& fn) {
-    
     if constexpr (ttg::detail::has_buffer_apply_v<Value>) {
       ttg::detail::buffer_apply(value, [&]<typename B>(B&& b){
         starpu_data_handle_t* data_handle = detail::get_starpu_data(b);

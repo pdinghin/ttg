@@ -35,7 +35,7 @@ namespace detail {
     }
   };
 
-  /* Helper to get address from pointers/smart pointers */
+  /* overloads for pointers and smart pointers */
   template<typename T>
   inline T* to_address(T* ptr) {
     return ptr;
@@ -48,8 +48,7 @@ namespace detail {
 
   /**
    * StarPU buffer data wrapper.
-   * TODO: Implement full StarPU data handle integration.
-   * Currently uses simple host memory management.
+   * TODO: Implement full StarPU data handle integration if needed.
    */
   template<typename PtrT, typename Allocator>
   struct ttg_starpu_data_types {
@@ -57,14 +56,15 @@ namespace detail {
     using allocator_type = typename allocator_traits::allocator_type;
     using value_type = typename allocator_traits::value_type;
 
+    // TODO: Look if we need to use ttg::device::available_space
     static constexpr bool always_allocate_on_host = true;
 
-    struct data_type {
+    struct data_copy_type {
       PtrT ptr;
       std::size_t size;
       void* host_ptr = nullptr;
       
-      data_type(PtrT p, std::size_t s) : ptr(p), size(s) {
+      data_copy_type(PtrT p, std::size_t s) : ptr(p), size(s) {
         host_ptr = to_address(ptr);
       }
     };
@@ -72,7 +72,7 @@ namespace detail {
     static void* create_data(std::size_t size, ttg::scope scope) {
       try {
         auto ptr = std::make_shared<value_type[]>(size);
-        auto* data = new data_type(ptr, size);
+        auto* data = new data_copy_type(ptr, size);
         return data;
       } catch (...) {
         throw std::bad_alloc();
@@ -81,13 +81,13 @@ namespace detail {
 
     template<typename PtrType>
     static void* create_data(PtrType& ptr, std::size_t size, ttg::scope scope) {
-      auto* data = new data_type(ptr, size);
+      auto* data = new data_copy_type(ptr, size);
       return data;
     }
 
     static void release_data(void* data_ptr) {
       if (data_ptr) {
-        delete static_cast<data_type*>(data_ptr);
+        delete static_cast<data_copy_type*>(data_ptr);
       }
     }
   };
@@ -95,9 +95,17 @@ namespace detail {
 } // namespace detail
 
 /**
- * A buffer that manages memory for TTG on StarPU.
+ * A buffer that is mirrored between host memory
+ * and different devices. The runtime is free to
+ * move data between device and host memory based
+ * on where the tasks are executing.
+ *
+ * Note that a buffer is movable and should not
+ * be shared between two objects (e.g., through a pointer)
+ * in order for TTG to properly facilitate ownership
+ * tracking of the containing object. * A buffer that manages memory for TTG on StarPU.
  * 
- * TODO: Integrate with StarPU data handles for automatic device management.
+ * TODO: Integrate with StarPU data handles if needed.
  * Currently all data is stored on host memory.
  */
 template<typename T, typename Allocator>
@@ -148,7 +156,7 @@ public:
   { }
 
   virtual ~Buffer() {
-    unpin();
+    unpin();  // make sure the copies are not pinned
     release_data();
   }
 
@@ -174,14 +182,12 @@ public:
   /* Set the current device owner
    * TODO: Implement StarPU device tracking */
   void set_owner_device(const ttg::device::Device& device) {
-    // TODO: Track which device "owns" the data
   }
 
   /* Check if data is current on device
    * TODO: Implement with StarPU data tracking */
   bool is_current_on(ttg::device::Device dev) const {
     if (empty()) return true;
-    // TODO: Check StarPU data handle state
     return true;
   }
 
@@ -191,16 +197,16 @@ public:
     return ttg::device::current_device();
   }
 
-  /* Get current device pointer */
+  /* Get the pointer on the currently active device. */
   pointer_type current_device_ptr() {
     if (empty()) return nullptr;
-    auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_type*>(m_data);
+    auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
     return static_cast<pointer_type>(data->host_ptr);
   }
 
   const_pointer_type current_device_ptr() const {
     if (empty()) return nullptr;
-    auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_type*>(m_data);
+    auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
     return static_cast<const_pointer_type>(data->host_ptr);
   }
 
@@ -277,7 +283,7 @@ public:
     return m_count == 0;
   }
 
-  /* Reset with new size */
+  /* Reallocate the buffer with count elements */
   void reset(std::size_t n, ttg::scope scope = ttg::scope::SyncIn) {
     release_data();
     m_data = detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::create_data(n, scope);
@@ -291,7 +297,9 @@ public:
     m_count = n;
   }
 
-  /* Clear the buffer */
+  /**
+   * Clears the buffer. After this operation, the buffer is empty.
+   */
   void clear() {
     release_data();
     m_count = 0;

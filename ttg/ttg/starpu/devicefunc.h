@@ -72,7 +72,7 @@ namespace ttg_starpu {
     // TODO: Implement post-device processing for StarPU. 
   template<typename... Buffer>
   void post_device_out(std::tuple<Buffer&...> &b) {
-    // TODO: StarPU device support - implement post-device processing
+    // TODO: StarPU device support, implement post-device processing
   }
 
   /* TODO: Implement proper StarPU data handle extraction.(starpu_datat_handle_t)

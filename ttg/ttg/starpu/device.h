@@ -23,7 +23,7 @@ namespace ttg_starpu {
     inline
     int ttg_device_to_starpu_device(const ttg::device::Device& device) {
       if (device.is_host()) {
-        return 0;  // Host device
+        return 0; 
       } else {
         return device.id() + first_device_id;  
       }

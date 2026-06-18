@@ -237,7 +237,10 @@ namespace ttg_starpu {
     {
       ttg::detail::register_world(*this);
       if (own_ctx) {
-         int ret = starpu_init(nullptr);
+         struct starpu_conf conf;
+         starpu_conf_init(&conf);
+         conf.ncpus = ncores;
+         int ret = starpu_init(&conf);
           if (ret != 0) {
             throw std::runtime_error("Failed to initialize StarPU");
           } 
@@ -768,9 +771,7 @@ namespace ttg_starpu {
   inline ttg::Edge<> &ttg_ctl_edge(ttg::World world) { return world.impl().ctl_edge(); }
 
   inline void ttg_sum(ttg::World world, double &value) {
-    double result = 0.0;
     //MPI_Allreduce(&value, &result, 1, MPI_DOUBLE, MPI_SUM, world.impl().comm());
-    value = result;
   }
 
   inline void make_executable_hook(ttg::World& world) {

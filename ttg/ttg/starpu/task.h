@@ -11,7 +11,7 @@
 #include <cassert>
 
 
-#define MAX_PARAM_COUNT 16  // Maximum number of task parameters
+#define MAX_PARAM_COUNT 20  // Maximum number of task parameters
 
 
 namespace ttg_starpu {

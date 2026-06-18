@@ -37,7 +37,9 @@ private:
   // starpu_data_handle_t m_handle = nullptr;
 
 public:
-
+  /* Constructing a devicescratch using application-managed memory.
+   * The memory pointed to by ptr must be accessible during
+   * the life-time of the devicescratch. */
   devicescratch(element_type* ptr, ttg::scope scope = ttg::scope::SyncIn, std::size_t count = 1)
   : m_ptr(ptr)
   , m_scope(scope)

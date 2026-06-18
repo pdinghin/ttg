@@ -353,7 +353,7 @@ int main(int argc, char** argv) {
 
     auto start = make_start(ctl);
 
-    // auto printer = make_printer(a);
+    //auto printer = make_printer(a);
     // auto printer2 = make_printer(b);
     // auto printer = make_printer(a_plus_b);
     // auto printer2 = make_printer(err);
