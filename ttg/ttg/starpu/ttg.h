@@ -858,6 +858,9 @@ namespace ttg_starpu {
     }
 
     using ttT = TT;
+    // We use key_t only for task creation in task.h
+    using key_t = keyT;
+    // key_type is used to convert void to int key in ttg code
     using key_type = std::conditional_t<ttg::meta::is_void_v<keyT>,int,keyT>;
     using input_terminals_type = ttg::detail::input_terminals_tuple_t<keyT, input_tuple_type>;
     using input_args_type = actual_input_tuple_type;
@@ -1675,8 +1678,8 @@ namespace ttg_starpu {
       set_arg_local_impl<i>(ttg::Void{}, *valueptr);
     }
 
-    template <typename Key>
-    task_t* create_new_task(const Key &key) {
+    template <typename key_type>
+    task_t* create_new_task(const key_type &key) {
       constexpr const bool keyT_is_Void = ttg::meta::is_void_v<keyT>;
       auto &world_impl = world.impl();
       int32_t priority = 0;
@@ -1736,12 +1739,13 @@ namespace ttg_starpu {
 
 
       ttg::trace(world.rank(), ":", get_name(), " : ", key, ": received value for argument : ", i);
-      
+      key_type hk;
       if constexpr (keyT_is_Void) {
-        key = 0;
+        hk = 0;
       }
       else{
         assert(keymap(key) == world.rank());
+        hk = key;
       }
       task_t *task = nullptr;
       auto &world_impl = world.impl();
@@ -1852,8 +1856,8 @@ namespace ttg_starpu {
 
       if (numins > 1 || reducer) {
         
-        this->tasks_table->starpu_hash_table_try_emplace_and_visit(key, [&](){
-          task = create_new_task(key);
+        this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
+          task = create_new_task(hk);
           world_impl.increment_created();
           get_pull_data = !is_lazy_pull();
           callback_fn(task);
@@ -1866,11 +1870,11 @@ namespace ttg_starpu {
 	        task = item;
         });
         if(to_remove) {
-          task = this->tasks_table->starpu_hash_table_remove(key,[](auto& item){return true;});
+          task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
           task->remove_from_hash = false;
         }
       } else {
-        task = create_new_task(key);
+        task = create_new_task(hk);
         world_impl.increment_created();
         callback_fn(task);
         task->remove_from_hash = false;
