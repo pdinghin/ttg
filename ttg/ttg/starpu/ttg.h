@@ -79,6 +79,7 @@
 
 #include "starpu.h"
 
+
 namespace ttg_starpu {
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
   typedef std::pair<static_set_arg_fct_type, ttg::TTBase *> static_set_arg_fct_call_t;
@@ -516,6 +517,17 @@ namespace ttg_starpu {
       }
       me->template invoke_op<ttg::ExecutionSpace::Host>();
     }
+    
+    template<typename TT>
+    inline void hook_cuda(void *descr[],void *cl_arg) {
+      if constexpr(TT::derived_has_cuda_op()) {
+        auto *me = static_cast<starpu_ttg_task_t<TT>*>(cl_arg);
+        me->template invoke_op<ttg::ExecutionSpace::CUDA>();
+      } else {
+        std::cerr << "CUDA hook called without having CUDA op!" << std::endl;
+      }
+    }
+
 
     template <typename KeyT, typename ActivationCallbackT>
     class rma_delayed_activate {
@@ -805,9 +817,15 @@ namespace ttg_starpu {
       using hashtable_keyT = std::conditional_t<ttg::meta::is_void_v<keyT>,int,keyT>;
     protected:
       starpu_codelet_t starpu_tt_cl = {
+        #if defined(TTG_HAVE_CUDA)
+        .where = STARPU_CPU | STARPU_CUDA,
+        .cpu_funcs = {detail::hook_cuda<TT>},
+        .nbuffers = 0
+        #else
         .where = STARPU_CPU,
         .cpu_funcs = {detail::hook<TT>},
         .nbuffers = 0
+        #endif
       };
       std::unique_ptr<starpu_hash_table<TT, hashtable_keyT>> tasks_table;
       std::unique_ptr<starpu_hash_table<TT, hashtable_keyT>> task_constraint_table;
@@ -852,9 +870,15 @@ namespace ttg_starpu {
 
    public:
     
-    //TODO: add Cuda or other device
+    // TODO: add Cuda or other device
+    template<typename DerivedT = derivedT>
+    static constexpr bool derived_has_cuda_op() {
+      return Space == ttg::ExecutionSpace::CUDA;
+    }
+
+    template<typename DerivedT = derivedT>
     static constexpr bool derived_has_device_op() {
-      return false;
+      return (derived_has_cuda_op<DerivedT>() );
     }
 
     using ttT = TT;

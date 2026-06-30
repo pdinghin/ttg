@@ -18,10 +18,17 @@ namespace ttg_starpu::detail {
       });
     }
   }
-  //TODO: Implement with starpu implementation when device support is ready
+  // Find the latest data copy on a device.
   inline std::tuple<int, void*> find_device_copy(void* data_handle) {
+    if (!data_handle) return {0, nullptr};
 
-    return {0, nullptr};
+    auto* handle = static_cast<starpu_data_handle_t*>(data_handle);
+    void* ptr = nullptr;
+    if (handle != nullptr) {
+      ptr = starpu_data_get_local_ptr(*handle);
+    }
+
+    return {0, ptr};
   }
 
 } // namespace ttg_starpu::detail

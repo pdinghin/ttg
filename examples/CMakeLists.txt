@@ -21,49 +21,80 @@ if (TARGET tiledarray)
     add_ttg_executable(testing_dpoinv potrf/testing_dpoinv.cc LINK_LIBRARIES tiledarray lapackpp)
 
     if (TARGET CUDA::cublas)
-      add_ttg_executable(bspmm-cuda spmm/spmm.cc
-                         LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS CUDA::cublas
-                         COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_CUDA=1
-                         RUNTIMES "parsec")
+      message(STATUS "Parsec is set to ${USE_PARSEC}")
+      
+      if(USE_PARSEC)
+        add_ttg_executable(bspmm-cuda spmm/spmm.cc
+                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS CUDA::cublas
+                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_CUDA=1
+                          RUNTIMES "parsec")
 
-      if (TARGET CUDA::cusolver)
-        add_ttg_executable(testing_dpotrf_cuda potrf/testing_dpotrf.cc
-                          LINK_LIBRARIES lapackpp tiledarray CUDA::cublas CUDA::cusolver
-                          COMPILE_DEFINITIONS TTG_ENABLE_CUDA=1 #;DEBUG_TILES_VALUES=1
-                          RUNTIMES "parsec")
-      endif(TARGET CUDA::cusolver)
+        if (TARGET CUDA::cusolver)
+          add_ttg_executable(testing_dpotrf_cuda potrf/testing_dpotrf.cc
+                            LINK_LIBRARIES lapackpp tiledarray CUDA::cublas CUDA::cusolver
+                            COMPILE_DEFINITIONS TTG_ENABLE_CUDA=1
+                            RUNTIMES "parsec")
+        endif(TARGET CUDA::cusolver)
+
+        if (TTG_HAVE_CUDA)
+          add_ttg_executable(chain-ttg-cuda task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+        endif(TTG_HAVE_CUDA)
+
+      else() # RUNTIME: StarPU
+        add_ttg_executable(bspmm-cuda spmm/spmm.cc
+                          LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS CUDA::cublas
+                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_CUDA=1
+                          RUNTIMES "starpu")
+                          
+        if (TARGET CUDA::cusolver)
+          add_ttg_executable(testing_dpotrf_cuda potrf/testing_dpotrf.cc
+                            LINK_LIBRARIES lapackpp tiledarray CUDA::cublas CUDA::cusolver
+                            COMPILE_DEFINITIONS TTG_ENABLE_CUDA=1
+                            RUNTIMES "starpu")
+        endif(TARGET CUDA::cusolver)
+        
+        if (TTG_HAVE_CUDA)
+          add_ttg_executable(chain-ttg-cuda task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "starpu")
+        endif(TTG_HAVE_CUDA)
+      endif()
+
     elseif (TARGET roc::hipblas)
-      add_ttg_executable(bspmm-hip spmm/spmm.cc
-                          LINK_LIBRARIES tiledarray TiledArray_Eigen roc::hipblas
-                          COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_HIP=1
-                          RUNTIMES "parsec")
-      if (TARGET roc::hipsolver)
-        add_ttg_executable(testing_dpotrf_hip potrf/testing_dpotrf.cc
-                           LINK_LIBRARIES lapackpp tiledarray roc::hipblas roc::hipsolver
-                           COMPILE_DEFINITIONS TTG_ENABLE_HIP=1 #;DEBUG_TILES_VALUES=1
-                           RUNTIMES "parsec")
-      endif(TARGET roc::hipsolver)
+      if(USE_PARSEC)
+        add_ttg_executable(bspmm-hip spmm/spmm.cc
+                            LINK_LIBRARIES tiledarray TiledArray_Eigen roc::hipblas
+                            COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_HIP=1
+                            RUNTIMES "parsec")
+        if (TARGET roc::hipsolver)
+          add_ttg_executable(testing_dpotrf_hip potrf/testing_dpotrf.cc
+                            LINK_LIBRARIES lapackpp tiledarray roc::hipblas roc::hipsolver
+                            COMPILE_DEFINITIONS TTG_ENABLE_HIP=1
+                            RUNTIMES "parsec")
+        endif(TARGET roc::hipsolver)
+        
+        if (TTG_HAVE_HIP)
+          add_ttg_executable(chain-ttg-hip task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
+        endif(TTG_HAVE_HIP)
+      else()
+        # Add StarPU HIP equivalents here if needed later
+      endif()
+
     elseif (TARGET MKL::MKL_DPCPP)
-      add_ttg_executable(bspmm-lz spmm/spmm.cc
+      if(USE_PARSEC)
+        add_ttg_executable(bspmm-lz spmm/spmm.cc
                           LINK_LIBRARIES tiledarray TiledArray_Eigen BTAS MKL::MKL_DPCPP level_zero::ze_loader m
                           COMPILE_DEFINITIONS BLOCK_SPARSE_GEMM=1;BTAS_TARGET_MAX_INDEX_RANK=2;TTG_ENABLE_LEVEL_ZERO=1
                           RUNTIMES "parsec")
-    endif()
-
-    if (TTG_HAVE_CUDA)
-      add_ttg_executable(chain-ttg-cuda task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
-    endif(TTG_HAVE_CUDA)
-
-    if (TTG_HAVE_HIP)
-      add_ttg_executable(chain-ttg-hip task-benchmarks/chain-ttg-dev.cc LINK_LIBRARIES tiledarray RUNTIMES "parsec")
-    endif(TTG_HAVE_HIP)
+      else()
+         # Add equivalent StarPU version
+      endif()
+    endif() 
+      
 endif()
 
 if (TARGET MADworld)
   add_ttg_executable(madness-1d madness/madness-1d/madness-1d.cc RUNTIMES "mad")
-  if (TARGET blaspp) #(CBLAS_FOUND AND MKL_FOUND)
+  if (TARGET blaspp)
     add_ttg_executable(mrattg madness/mrattg.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES blaspp MADworld)
-
     add_ttg_executable(mrattg-streaming madness/mrattg_streaming.cc mragl.cc mratwoscale.cc mradomain.h mrafunctiondata.h mrafunctionfunctor.h mrafunctionnode.h mragl.h mrahash.h mrakey.h mramisc.h mramxm.h mrarange.h mrasimpletensor.h mratwoscale.h mratypes.h LINK_LIBRARIES blaspp MADworld)
   endif ()
 endif (TARGET MADworld)
@@ -90,5 +121,3 @@ add_ttg_executable(sw sw/sw.cc)
 if (TARGET MADworld)
   add_ttg_executable(randomaccess randomaccess/randomaccess.cc RUNTIMES "mad")
 endif (TARGET MADworld)
-
-

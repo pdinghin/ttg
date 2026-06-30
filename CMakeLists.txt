@@ -137,18 +137,33 @@ endif(TTG_ENABLE_COROUTINES)
 
 
 ##########################
-#### CUDA: must come before PaRSEC
+#### CUDA: must come before PaRSEC and StarPU
 ##########################
 if (TTG_ENABLE_CUDA)
-  # default to CUDA arch 5.2
   if (NOT CMAKE_CUDA_ARCHITECTURES)
     set(CMAKE_CUDA_ARCHITECTURES 52)
   endif (NOT CMAKE_CUDA_ARCHITECTURES)
-  include(CheckLanguage)
-  check_language(CUDA)
-  if(CMAKE_CUDA_COMPILER)
-    enable_language(CUDA)
-  endif(CMAKE_CUDA_COMPILER)
+
+  if(USE_PARSEC)
+    include(CheckLanguage)
+    check_language(CUDA)
+    if(CMAKE_CUDA_COMPILER)
+      enable_language(CUDA)
+    endif(CMAKE_CUDA_COMPILER)
+
+  else()
+    include(CheckLanguage)
+    check_language(CUDA)
+    if(CMAKE_CUDA_COMPILER)
+      enable_language(CUDA)
+      set(CMAKE_CUDA_STANDARD 17) 
+      set(CMAKE_CUDA_STANDARD_REQUIRED ON)
+      message(STATUS "CUDA language support dynamically enabled for StarPU backend.")
+    else()
+      message(FATAL_ERROR "CUDA was requested for StarPU, but no CUDA compiler (nvcc) was found.")
+    endif()
+  endif()
+
   set(TTG_HAVE_CUDA ${CMAKE_CUDA_COMPILER} CACHE BOOL "True if TTG supports compiling .cu files")
 
   find_package(CUDAToolkit)
@@ -222,6 +237,17 @@ include(FindOrFetchStarPu)
 if (TARGET MyProject::StarPU)
   include(FindOrFetchBoost)
   target_link_libraries(MyProject::StarPU INTERFACE Boost::headers)
+
+  find_package(TBB)
+  if (TBB_FOUND)
+    include(ImportTBB)
+    import_tbb()
+    target_link_libraries(MyProject::StarPU INTERFACE tbb)
+    message(STATUS "TBB_FOUND=1")
+  else()
+    message(STATUS "TBB not found; StarPU target will not automatically link TBB")
+  endif()
+
   message(STATUS "STARPU_FOUND=1")
 endif(TARGET MyProject::StarPU)
 # PaRSEC

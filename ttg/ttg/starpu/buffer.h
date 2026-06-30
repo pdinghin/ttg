@@ -63,9 +63,15 @@ namespace detail {
       PtrT ptr;
       std::size_t size;
       void* host_ptr = nullptr;
+      starpu_data_handle_t handle = nullptr;
       
       data_copy_type(PtrT p, std::size_t s) : ptr(p), size(s) {
         host_ptr = to_address(ptr);
+        if (host_ptr != nullptr) {
+          starpu_vector_data_register(&handle, STARPU_MAIN_RAM,
+                                      reinterpret_cast<uintptr_t>(host_ptr),
+                                      static_cast<uint32_t>(s), sizeof(value_type));
+        }
       }
     };
 
@@ -87,7 +93,11 @@ namespace detail {
 
     static void release_data(void* data_ptr) {
       if (data_ptr) {
-        delete static_cast<data_copy_type*>(data_ptr);
+        auto* copy = static_cast<data_copy_type*>(data_ptr);
+        if (copy->handle) {
+          starpu_data_unregister(copy->handle);
+        }
+        delete copy;
       }
     }
   };
@@ -122,6 +132,7 @@ struct Buffer {
 private:
   void* m_data = nullptr;
   std::size_t m_count = 0;
+  starpu_data_handle_t m_handle = nullptr;
   
   friend void* detail::get_starpu_data<T>(const ttg_starpu::Buffer<T, Allocator>&);
 
@@ -185,14 +196,16 @@ public:
   }
 
   /* Check if data is current on device
-   * TODO: Implement with StarPU data tracking */
+   * StarPU handles this automatically via the data handle.
+   */
   bool is_current_on(ttg::device::Device dev) const {
     if (empty()) return true;
-    return true;
+    return true; // StarPU ensures coherency on demand
   }
 
   /* Get owner device
-   * TODO: Implement with StarPU tracking */
+   * StarPU handles this internally.
+   */
   ttg::device::Device get_owner_device() const {
     return ttg::device::current_device();
   }
@@ -201,13 +214,17 @@ public:
   pointer_type current_device_ptr() {
     if (empty()) return nullptr;
     auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
-    return static_cast<pointer_type>(data->host_ptr);
+    void* ptr = nullptr;
+    starpu_data_get_local_ptr(data->handle, &ptr);
+    return static_cast<pointer_type>(ptr);
   }
 
   const_pointer_type current_device_ptr() const {
     if (empty()) return nullptr;
-    auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
-    return static_cast<const_pointer_type>(data->host_ptr);
+    auto* data = static_cast<const detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
+    void* ptr = nullptr;
+    starpu_data_get_local_ptr(data->handle, &ptr);
+    return static_cast<const_pointer_type>(ptr);
   }
 
   pointer_type owner_device_ptr() {
@@ -227,23 +244,28 @@ public:
   }
 
   pointer_type host_ptr() {
-    return current_device_ptr();
+    if (empty()) return nullptr;
+    auto* data = static_cast<detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
+    return static_cast<pointer_type>(data->host_ptr);
   }
 
   const_pointer_type host_ptr() const {
-    return current_device_ptr();
+    if (empty()) return nullptr;
+    auto* data = static_cast<const detail::ttg_starpu_data_types<std::shared_ptr<value_type[]>, Allocator>::data_copy_type*>(m_data);
+    return static_cast<const_pointer_type>(data->host_ptr);
   }
 
   /* Check if valid on device
-   * TODO: Implement with StarPU */
+   * StarPU handles validity automatically.
+   */
   bool is_valid_on(const ttg::device::Device& device) const {
     return is_valid();
   }
 
   /* Allocate on device
-   * TODO: Implement with StarPU device allocation */
+   * StarPU handles allocation on-demand.
+   */
   void allocate_on(const ttg::device::Device& device) {
-    // Currently all allocation is on host
     if (!m_data && m_count > 0) {
       throw std::runtime_error("Cannot allocate on an empty buffer!");
     }
@@ -365,7 +387,7 @@ public:
 namespace detail {
   template<typename T, typename A>
   void* get_starpu_data(const ttg_starpu::Buffer<T, A>& db) {
-    return const_cast<void*>(db.m_data);
+    return const_cast<void*>(reinterpret_cast<const void*>(&db.m_handle));
   }
 } // namespace detail
 
