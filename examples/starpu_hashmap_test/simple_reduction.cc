@@ -1,6 +1,9 @@
 #include <ttg.h>
 #include <iostream>
 #include <chrono>
+#include <getopt.h>
+#include <future>
+#include <fstream>
 
 struct BadKey {
     int64_t id;
@@ -29,10 +32,40 @@ namespace std {
 }
 
 int main(int argc, char *argv[]) {
-    ttg::initialize(argc, argv, -1);
 
-    const int64_t H = 8;
+    static struct option long_options[]{
+        {"height", required_argument, 0,'h'},
+        {"record", required_argument, 0, 'r'},
+        {"name-test", required_argument,0,'n'},
+        {0,0,0,0}
+    };
+
+    int64_t H = 2;
+    bool rec = false;
+    std::string rec_file;
+    std::string name_test = "ttg_starpu";
+    int opt;
+    while((opt = getopt_long(argc,argv,"h:r:",long_options,nullptr)) != -1){
+        switch(opt){
+            case 'h':
+                H = atoi(optarg);
+                break;
+            case 'r':
+                rec_file = optarg;
+                rec = true;
+                break;
+            case 'n':
+                name_test = optarg;
+                break;
+            default:
+                break;
+        }
+    }
+
     const int64_t N = 1 << H; 
+    std::cout << "Number of leaf : " << N <<  " Number of threads : " << ttg::detail::num_threads() << std::endl;
+    ttg::initialize(argc, argv, -1);
+    
 
     ttg::Edge<BadKey, int64_t> left_edge;
     ttg::Edge<BadKey, int64_t> right_edge;
@@ -75,8 +108,12 @@ int main(int argc, char *argv[]) {
         "node"
     );
 
+    std::promise<int64_t> res_promise;
+    auto res_future = res_promise.get_future();
+
     auto printer = ttg::make_tt(
-        [=](int64_t res) {
+        [=, &res_promise](int64_t res) {
+            res_promise.set_value(res);
             std::cout << "Final result : " << res << " | Expected result : " << N << std::endl;
         },
         ttg::edges(node_2_pr),
@@ -101,7 +138,12 @@ int main(int argc, char *argv[]) {
     std::chrono::duration<double, std::milli> duration = end - start;
 
     if (ttg::get_default_world().rank() == 0) {
-        std::cout << "Execution time : " << duration.count() << " ms" << std::endl;
+        int64_t final_res = res_future.get();
+        std::cout << "Execution time : " << duration.count() << " ms | Result: " << final_res << " Expected result :" << N << std::endl;
+        if(rec){
+            std::ofstream outFile(rec_file,std::ios::app);
+            outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << final_res << ";" << N << name_test << ";" << "\n";
+        }
     }
 
     ttg::finalize();
