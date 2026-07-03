@@ -5,76 +5,69 @@
 #include <future>
 #include <fstream>
 
-struct BadKey {
+struct StressKey {
     int64_t id;
 
-    BadKey() = default;
-    explicit BadKey(int64_t i) : id(i) {}
+    StressKey() = default;
+    explicit StressKey(int64_t i) : id(i) {}
 
     operator int64_t() const { return id; }
 
-    bool operator==(const BadKey& other) const { return id == other.id; }
-    bool operator!=(const BadKey& other) const { return id != other.id; }
-    bool operator<(const BadKey& other) const { return id < other.id; }
+    bool operator==(const StressKey& other) const { return id == other.id; }
+    bool operator!=(const StressKey& other) const { return id != other.id; }
+    bool operator<(const StressKey& other) const { return id < other.id; }
 
     std::size_t hash() const {
         return 42; 
     }
 };
 
+struct NormalKey {
+    int64_t id;
+
+    NormalKey() = default;
+    explicit NormalKey(int64_t i) : id(i) {}
+
+    operator int64_t() const { return id; }
+
+    bool operator==(const NormalKey& other) const { return id == other.id; }
+    bool operator!=(const NormalKey& other) const { return id != other.id; }
+    bool operator<(const NormalKey& other) const { return id < other.id; }
+
+    std::size_t hash() const {
+        return std::hash<int64_t>{}(id);
+    }
+};
+
 namespace std {
     template <>
-    struct hash<BadKey> {
-        std::size_t operator()(const BadKey& k) const {
+    struct hash<StressKey> {
+        std::size_t operator()(const StressKey& k) const {
             return 42; 
+        }
+    };
+
+    template <>
+    struct hash<NormalKey> {
+        std::size_t operator()(const NormalKey& k) const {
+            return std::hash<int64_t>{}(k.id);
         }
     };
 }
 
-int main(int argc, char *argv[]) {
 
-    static struct option long_options[]{
-        {"height", required_argument, 0,'h'},
-        {"record", required_argument, 0, 'r'},
-        {"name-test", required_argument,0,'n'},
-        {0,0,0,0}
-    };
-
-    int64_t H = 2;
-    bool rec = false;
-    std::string rec_file;
-    std::string name_test = "ttg_starpu";
-    int opt;
-    while((opt = getopt_long(argc,argv,"h:r:",long_options,nullptr)) != -1){
-        switch(opt){
-            case 'h':
-                H = atoi(optarg);
-                break;
-            case 'r':
-                rec_file = optarg;
-                rec = true;
-                break;
-            case 'n':
-                name_test = optarg;
-                break;
-            default:
-                break;
-        }
-    }
-
-    const int64_t N = 1 << H; 
-    std::cout << "Number of leaf : " << N <<  " Number of threads : " << ttg::detail::num_threads() << std::endl;
-    ttg::initialize(argc, argv, -1);
+template <typename K>
+void run_reduction(int64_t H, bool rec, std::string rec_file, std::string name_test) {
+    const int64_t N = 1 << H;
     
-
-    ttg::Edge<BadKey, int64_t> left_edge;
-    ttg::Edge<BadKey, int64_t> right_edge;
+    ttg::Edge<K, int64_t> left_edge;
+    ttg::Edge<K, int64_t> right_edge;
     ttg::Edge<void, int64_t> node_2_pr;
 
-    auto leaf = ttg::make_tt<BadKey>(
-        [=](BadKey key, auto& out) {
+    auto leaf = ttg::make_tt<K>(
+        [=](K key, auto& out) {
             int64_t n = key.id;
-            BadKey parent_key(n / 2);
+            K parent_key(n / 2);
 
             if (n % 2 == 0) {
                 ttg::send<0>(parent_key, 1, out); 
@@ -88,12 +81,12 @@ int main(int argc, char *argv[]) {
     );
 
     auto node = ttg::make_tt(
-        [=](BadKey key, int64_t left_val, int64_t right_val, auto& out) {
+        [=](K key, int64_t left_val, int64_t right_val, auto& out) {
             int64_t n = key.id;
             int64_t sum = left_val + right_val;
             
             if (n > 1) {
-                BadKey parent_key(n / 2);
+                K parent_key(n / 2);
                 if (n % 2 == 0) {
                     ttg::send<0>(parent_key, sum, out); 
                 } else {
@@ -128,10 +121,9 @@ int main(int argc, char *argv[]) {
 
     if (ttg::get_default_world().rank() == 0) {
         for (int64_t i = N; i < 2 * N; ++i) {
-            leaf->invoke(BadKey(i));
+            leaf->invoke(K(i));
         }
     }
-
     ttg::fence();
     
     auto end = std::chrono::high_resolution_clock::now();
@@ -144,6 +136,53 @@ int main(int argc, char *argv[]) {
             std::ofstream outFile(rec_file,std::ios::app);
             outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << final_res << ";" << N << name_test << ";" << "\n";
         }
+    }
+}
+
+int main(int argc, char *argv[]) {
+
+    static struct option long_options[]{
+        {"height", required_argument, 0,'h'},
+        {"record", required_argument, 0, 'r'},
+        {"name-test", required_argument, 0, 'n'},
+        {"key", required_argument, 0, 'k'},
+        {0,0,0,0}
+    };
+
+    int64_t H = 2;
+    bool rec = false;
+    std::string rec_file;
+    std::string name_test = "ttg_starpu";
+    std::string key_type = "normal";
+    int opt;
+    while((opt = getopt_long(argc,argv,"h:r:k:n:",long_options,nullptr)) != -1){
+        switch(opt){
+            case 'h':
+                H = atoi(optarg);
+                break;
+            case 'r':
+                rec_file = optarg;
+                rec = true;
+                break;
+            case 'n':
+                name_test = optarg;
+                break;
+            case 'k':
+                key_type = optarg;
+                break;
+            default:
+                break;
+        }
+    }
+
+    const int64_t N = 1 << H; 
+    std::cout << "Number of leaf : " << N <<  " Number of threads : " << ttg::detail::num_threads() << std::endl;
+    ttg::initialize(argc, argv, -1);
+    
+    if (key_type == "stress") {
+        run_reduction<StressKey>(H, rec, rec_file, name_test);
+    } else {
+        run_reduction<NormalKey>(H, rec, rec_file, name_test);
     }
 
     ttg::finalize();
