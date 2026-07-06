@@ -302,6 +302,7 @@ namespace ttg_starpu {
         //   parsec_context_at_fini(unregister_parsec_tags, nullptr);
         // }
         // if (own_ctx) parsec_fini(&ctx);
+        starpu_shutdown();
         mark_invalid();
       }
     }
