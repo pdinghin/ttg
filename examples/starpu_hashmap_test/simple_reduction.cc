@@ -5,6 +5,10 @@
 #include <future>
 #include <fstream>
 
+#if MEASURE_HASH
+    std::atomic_llong global_hash_time{0};
+#endif
+
 struct StressKey {
     int64_t id;
 
@@ -128,13 +132,20 @@ void run_reduction(int64_t H, bool rec, std::string rec_file, std::string name_t
     
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
-
+    #if MEASURE_HASH
+        global_hash_time.fetch_add(tl_accumulated_ns,std::memory_order_relaxed);
+    #endif
     if (ttg::get_default_world().rank() == 0) {
         int64_t final_res = res_future.get();
         std::cout << "Execution time : " << duration.count() << " ms | Result: " << final_res << " Expected result :" << N << std::endl;
         if(rec){
             std::ofstream outFile(rec_file,std::ios::app);
-            outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << final_res << ";" << N << name_test << ";" << "\n";
+            #if MEASURE_HASH
+                long long avg_hash_time = global_hash_time.load() / ttg::detail::num_threads();
+                outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << avg_hash_time << ";" << final_res << ";" << N << ";" << name_test << "\n";
+            #else
+                outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << " "<< ";" << final_res << ";" << N << ";" << name_test << "\n";
+            #endif
         }
     }
 }
@@ -154,6 +165,7 @@ int main(int argc, char *argv[]) {
     std::string rec_file;
     std::string name_test = "ttg_starpu";
     std::string key_type = "normal";
+
     int opt;
     while((opt = getopt_long(argc,argv,"h:r:k:n:",long_options,nullptr)) != -1){
         switch(opt){

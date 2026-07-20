@@ -12,6 +12,8 @@
  * This may avoid extra copies in exchange for concurrency.
  * This may cause deadlocks, so use with caution. */
 #define TTG_STARPU_DEFER_WRITER false
+#define MEASURE_HASH true
+
 
 #include "ttg/config.h"
 
@@ -78,6 +80,17 @@
 #include "ttg/device/device.h"
 
 #include "starpu.h"
+
+#if MEASURE_HASH
+#include <chrono>
+  thread_local long long tl_accumulated_ns = 0;
+
+  void accumulate_measure(auto start, auto end){
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    tl_accumulated_ns += elapsed.count();
+    std::cout << tl_accumulated_ns << std::endl;
+  }
+#endif
 
 namespace ttg_starpu {
   typedef void (*static_set_arg_fct_type)(void *, size_t, ttg::TTBase *);
@@ -1856,7 +1869,9 @@ namespace ttg_starpu {
 
 
       if (numins > 1 || reducer) {
-        
+        #if MEASURE_HASH
+          auto start = std::chrono::steady_clock::now();
+        #endif
         this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
           task = create_new_task(hk);
           world_impl.increment_created();
@@ -1870,8 +1885,19 @@ namespace ttg_starpu {
           callback_fn(item);
 	        task = item;
         });
+        #if MEASURE_HASH
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif
         if(to_remove) {
+          #if MEASURE_HASH
+            start = std::chrono::steady_clock::now();
+          #endif
           task = this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
+          #if MEASURE_HASH
+            end = std::chrono::steady_clock::now();
+            accumulate_measure(start,end);
+          #endif
           task->remove_from_hash = false;
         }
       } else {
@@ -1986,8 +2012,16 @@ namespace ttg_starpu {
             ttg::trace(world.rank(), ":", get_name(), ": submitting task for op ");
           }
         }
-        if (task->remove_from_hash) this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
-
+        if (task->remove_from_hash) {
+          #if MEASURE_HASH
+            auto start = std::chrono::steady_clock::now();
+          #endif
+          this->tasks_table->starpu_hash_table_remove(hk,[](auto& item){return true;});
+          #if MEASURE_HASH
+            auto end = std::chrono::steady_clock::now();
+            accumulate_measure(start,end);
+          #endif
+        }
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
             starpu_task_submit(task->starpu_task);
@@ -2334,6 +2368,9 @@ namespace ttg_starpu {
 
         task_t *task;
         //TODO: Verify if we need to put fetch_add/sub here
+        #if MEASURE_HASH 
+          auto start = std::chrono::steady_clock::now();
+        #endif
         this->tasks_table->starpu_hash_table_try_emplace_and_visit(key, [&](){
           task = create_new_task(key);
           world.impl().increment_created();
@@ -2341,6 +2378,10 @@ namespace ttg_starpu {
         }, [&](auto& item){
           task = item;
         });
+        #if MEASURE_HASH 
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2385,6 +2426,9 @@ namespace ttg_starpu {
 
         key_type hk = 0;
         task_t *task;
+        #if MEASURE_HASH
+          auto start = std::chrono::steady_clock::now();
+        #endif
         this->tasks_table->starpu_hash_table_try_emplace_and_visit(hk, [&](){
           task = create_new_task(ttg::Void{});
           world.impl().increment_created();
@@ -2392,6 +2436,10 @@ namespace ttg_starpu {
         }, [&](auto& item){
           task = item;
         });
+        #if MEASURE_HASH
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2433,12 +2481,19 @@ namespace ttg_starpu {
       } else {
         ttg::trace(world.rank(), ":", get_name(), " : ", key, ": finalizing stream for terminal ", i);
         task_t *task = nullptr;
+        #if MEASURE_HASH
+          auto start = std::chrono::steady_clock::now();
+        #endif
         if(!this->tasks_table->starpu_hash_table_visit(key, [&](auto& item) {
           task = item;
         })){
           ttg::print_error(world.rank(), ":", get_name(), " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("TT::finalize called on stream that never received an input data");
         }
+        #if MEASURE_HASH
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
@@ -2480,6 +2535,9 @@ namespace ttg_starpu {
 
         key_type hk = 0;
         task_t *task = nullptr;
+        #if MEASURE_HASH
+          auto start = std::chrono::steady_clock::now();
+        #endif
         if (!this->tasks_table->starpu_hash_table_visit(hk, [&](auto& item) {
               task = item;
             })) {
@@ -2487,6 +2545,10 @@ namespace ttg_starpu {
                            " : error finalize called on stream that never received an input data: ", i);
           throw std::runtime_error("TT::finalize called on stream that never received an input data");
         }
+        #if MEASURE_HASH
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif
 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
