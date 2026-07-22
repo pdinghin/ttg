@@ -12,6 +12,7 @@
  * This may avoid extra copies in exchange for concurrency.
  * This may cause deadlocks, so use with caution. */
 #define TTG_PARSEC_DEFER_WRITER false
+#define MEASURE_HASH true
 
 #include "ttg/config.h"
 
@@ -124,6 +125,17 @@
 #include "ttg/device/device.h"
 
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
+
+#if MEASURE_HASH
+#include <chrono>
+  thread_local long long tl_accumulated_ns = 0;
+
+  void accumulate_measure(auto start, auto end){
+    auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
+    tl_accumulated_ns += elapsed.count();
+    std::cout << tl_accumulated_ns << std::endl;
+  }
+#endif
 
 /* PaRSEC function declarations */
 extern "C" {
@@ -2467,9 +2479,15 @@ namespace ttg_parsec {
 #endif
       bool get_pull_data = false;
       bool has_lock = false;
+      #if MEASURE_HASH
+        auto start = std::chrono::steady_clock::now();
+      #endif 
       /* If we have only one input and no reducer on that input we can skip the hash table */
       if (numins > 1 || reducer) {
         has_lock = true;
+        #if MEASURE_HASH
+          start = std::chrono::steady_clock::now();
+        #endif
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
@@ -2586,9 +2604,17 @@ namespace ttg_parsec {
 
             /* now we can unlock the bucket */
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
+            #if MEASURE_HASH
+              auto end = std::chrono::steady_clock::now();
+              accumulate_measure(start,end);
+            #endif 
           } else {
             /* unlock the bucket, the lock is not needed anymore */
             parsec_hash_table_unlock_bucket(&tasks_table, hk);
+            #if MEASURE_HASH
+              auto end = std::chrono::steady_clock::now();
+              accumulate_measure(start,end);
+            #endif 
 
             /* get the copy to use as input for this task */
             detail::ttg_data_copy_t *copy = get_copy_fn(task, std::forward<Value>(value), true);
@@ -2600,6 +2626,10 @@ namespace ttg_parsec {
         } else {
           /* unlock the bucket, the lock is not needed anymore */
           parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          #if MEASURE_HASH
+            auto end = std::chrono::steady_clock::now();
+            accumulate_measure(start,end);
+          #endif 
           /* submit reducer for void values to handle side effects */
           submit_reducer_task(task);
         }
@@ -2612,6 +2642,10 @@ namespace ttg_parsec {
         /* unlock the bucket, the lock is not needed anymore */
         if (has_lock) {
           parsec_hash_table_unlock_bucket(&tasks_table, hk);
+          #if MEASURE_HASH
+            auto end = std::chrono::steady_clock::now();
+            accumulate_measure(start,end);
+          #endif 
         }
         /* whether the task needs to be deferred or not */
         if constexpr (!valueT_is_Void) {
@@ -2749,8 +2783,16 @@ namespace ttg_parsec {
             ttg::trace(world.rank(), ":", get_name(), ": submitting task for op ");
           }
         }
-        if (task->remove_from_hash) parsec_hash_table_remove(&tasks_table, hk);
-
+        if (task->remove_from_hash) {
+          #if MEASURE_HASH
+            auto start = std::chrono::steady_clock::now();
+          #endif
+          parsec_hash_table_remove(&tasks_table, hk);
+          #if MEASURE_HASH
+            auto end = std::chrono::steady_clock::now();
+            accumulate_measure(start,end);
+          #endif 
+        }
         if (check_constraints(task)) {
           if (nullptr == task_ring) {
             parsec_task_t *vp_task_rings[1] = { &task->parsec_task };
@@ -3332,6 +3374,9 @@ namespace ttg_parsec {
 
         auto hk = reinterpret_cast<parsec_key_t>(&key);
         task_t *task;
+        #if MEASURE_HASH
+          auto start = std::chrono::steady_clock::now();
+        #endif
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(key);
@@ -3344,7 +3389,10 @@ namespace ttg_parsec {
           }
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
-
+        #if MEASURE_HASH
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
@@ -3391,6 +3439,9 @@ namespace ttg_parsec {
 
         parsec_key_t hk = 0;
         task_t *task;
+        #if MEASURE_HASH
+          auto start = std::chrono::steady_clock::now();
+        #endif
         parsec_hash_table_lock_bucket(&tasks_table, hk);
         if (nullptr == (task = (task_t *)parsec_hash_table_nolock_find(&tasks_table, hk))) {
           task = create_new_task(ttg::Void{});
@@ -3403,7 +3454,10 @@ namespace ttg_parsec {
           }
         }
         parsec_hash_table_unlock_bucket(&tasks_table, hk);
-
+        #if MEASURE_HASH
+          auto end = std::chrono::steady_clock::now();
+          accumulate_measure(start,end);
+        #endif 
         // TODO: Unfriendly implementation, cannot check if stream is already bounded
         // TODO: Unfriendly implementation, cannot check if stream has been finalized already
 
