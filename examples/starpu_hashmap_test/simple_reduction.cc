@@ -143,7 +143,7 @@ void run_reduction(int64_t H, bool rec, std::string rec_file, std::string name_t
             std::ofstream outFile(rec_file,std::ios::app);
             #if MEASURE_HASH
                 const long long total_hash_time_ns = global_hash_time_ns.load(std::memory_order_relaxed);
-                long long avg_hash_time = total_hash_time_ns / (ttg::detail::num_threads() * 1000000);
+                long long avg_hash_time = total_hash_time_ns / (ttg::detail::num_threads());
                 outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << avg_hash_time << ";" << final_res << ";" << N << ";" << name_test << "\n";
             #else
                 outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << " "<< ";" << final_res << ";" << N << ";" << name_test << "\n";

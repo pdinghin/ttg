@@ -127,13 +127,15 @@
 #undef TTG_PARSEC_DEBUG_TRACK_DATA_COPIES
 
 #if MEASURE_HASH
+#include <atomic>
 #include <chrono>
-  thread_local long long tl_accumulated_ns = 0;
+  inline thread_local long long tl_accumulated_ns = 0;
+  inline std::atomic_llong global_hash_time_ns{0};
 
-  void accumulate_measure(auto start, auto end){
+  inline void accumulate_measure(auto start, auto end){
     auto elapsed = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start);
     tl_accumulated_ns += elapsed.count();
-    std::cout << tl_accumulated_ns << std::endl;
+    global_hash_time_ns.fetch_add(elapsed.count(), std::memory_order_relaxed);
   }
 #endif
 
