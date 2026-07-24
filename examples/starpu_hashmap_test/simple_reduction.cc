@@ -133,7 +133,8 @@ void run_reduction(int64_t H, bool rec, std::string rec_file, std::string name_t
     auto end = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> duration = end - start;
     #if MEASURE_HASH
-        global_hash_time.fetch_add(tl_accumulated_ns,std::memory_order_relaxed);
+        const long long hash_time_ns = global_hash_time_ns.load(std::memory_order_relaxed);
+        global_hash_time.fetch_add(hash_time_ns, std::memory_order_relaxed);
     #endif
     if (ttg::get_default_world().rank() == 0) {
         int64_t final_res = res_future.get();
@@ -141,7 +142,8 @@ void run_reduction(int64_t H, bool rec, std::string rec_file, std::string name_t
         if(rec){
             std::ofstream outFile(rec_file,std::ios::app);
             #if MEASURE_HASH
-                long long avg_hash_time = global_hash_time.load() / (ttg::detail::num_threads() * 1000);
+                const long long total_hash_time_ns = global_hash_time_ns.load(std::memory_order_relaxed);
+                long long avg_hash_time = total_hash_time_ns / (ttg::detail::num_threads() * 1000000);
                 outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << avg_hash_time << ";" << final_res << ";" << N << ";" << name_test << "\n";
             #else
                 outFile << ttg::detail::num_threads() << ";" << duration.count() << ";" << " "<< ";" << final_res << ";" << N << ";" << name_test << "\n";
