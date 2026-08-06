@@ -74,6 +74,14 @@
 #include <tuple>
 #include <vector>
 
+
+#if defined(TTG_HAVE_MPI)
+#include <mpi.h>
+#if defined(TTG_HAVE_MPIEXT)
+#include <mpi-ext.h>
+#endif // TTG_HAVE_MPIEXT
+#endif
+
 #include <cstdlib>
 #include <cstring>
 
@@ -214,15 +222,13 @@ namespace ttg_starpu {
 
     int query_comm_size() {
       int comm_size;
-      //MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
-      comm_size = 1;
+      MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
       return comm_size;
     }
 
     int query_comm_rank() {
       int comm_rank;
-      //MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
-      comm_rank = 0; 
+      MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
       return comm_rank;
     }
 
@@ -295,11 +301,7 @@ namespace ttg_starpu {
     static constexpr int starpu_ttg_tag() { return 0; }
     static constexpr int starpu_ttg_rma_tag() { return 0; }
 
-    //TODO: delete when mpi support is added
-    #ifndef MPI_Comm
-      #define MPI_Comm int
-    #endif
-    MPI_Comm comm() const { return 0; }
+    MPI_Comm comm() const { return MPI_COMM_WORLD; }
 
     virtual void execute() override {
       
@@ -1977,7 +1979,7 @@ namespace ttg_starpu {
           // no constraint blocked this task, so go ahead and release
           task = this->task_constraint_table->starpu_hash_table_remove(key,[](auto& item){return true;});
           assert(task != nullptr);
-          task_ring.push_back(&task->starpu_task);
+          task_ring.push_back(task->starpu_task);
         }
       }
       if (!task_ring.empty()) {
@@ -2066,6 +2068,10 @@ namespace ttg_starpu {
 
     template<typename Value, typename Key>
     bool can_inline_data(Value* value_ptr, detail::ttg_data_copy_t *copy, const Key& key, std::size_t num_keys) {
+      if constexpr (derived_has_device_op()) {
+        /* don't inline if data is possibly on the device */
+        return false;
+      }
       /* non-device data */
       using decvalueT = std::decay_t<Value>;
       bool inline_data = false;
