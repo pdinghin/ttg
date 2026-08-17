@@ -65,6 +65,7 @@ set(CMAKE_INSTALL_CMAKEDIR "lib/cmake/ttg"
 #### user-defined configuration options
 ########################################
 option(TTG_PARSEC_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in PaRSEC backend" OFF)
+option(TTG_STARPU_USE_BOOST_SERIALIZATION "Whether to select Boost serialization methods in StarPU backend" OFF)
 option(TTG_ENABLE_CUDA "Whether to TTG will look for CUDA" OFF)
 option(TTG_ENABLE_HIP "Whether to TTG will look for HIP" OFF)
 option(TTG_ENABLE_LEVEL_ZERO "Whether to TTG will look for Intel oneAPI Level Zero" OFF)
@@ -78,6 +79,7 @@ option(TTG_ENABLE_TRACE "Whether to enable ttg::trace() output" OFF)
 
 option(USE_PARSEC "Wether to enable Parsec" OFF)
 option(USE_MADNESS "Wether to enable Madness" OFF)
+option(USE_STARPU "Wether to enable StarPU" ON)
 # See https://medium.com/@alasher/colored-c-compiler-output-with-ninja-clang-gcc-10bfe7f2b949
 option (FORCE_COLORED_OUTPUT "Always produce ANSI-colored output (GNU/Clang only)." TRUE)
 if (FORCE_COLORED_OUTPUT)
@@ -109,8 +111,14 @@ endif (BUILD_TESTING)
 #### optional prerequisites
 ###########################
 # Boost: only truly needed if TTG_PARSEC_USE_BOOST_SERIALIZATION=ON or building examples
+
+if (TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_EXAMPLES)
 if(USE_PARSEC)
-  if (TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_EXAMPLES)
+    include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
+  endif()
+endif()
+if (TTG_STARPU_USE_BOOST_SERIALIZATION OR TTG_EXAMPLES)
+  if(USE_STARPU)
     include("${PROJECT_SOURCE_DIR}/cmake/modules/FindOrFetchBoost.cmake")
   endif()
 endif()
@@ -222,6 +230,15 @@ include(FindOrFetchStarPu)
 if (TARGET MyProject::StarPU)
   include(FindOrFetchBoost)
   target_link_libraries(MyProject::StarPU INTERFACE Boost::headers)
+  find_package(TBB)
+  if (TBB_FOUND)
+    include(ImportTBB)
+    import_tbb()
+    target_link_libraries(MyProject::StarPU INTERFACE tbb)
+    message(STATUS "TBB_FOUND=1")
+  else()
+    message(STATUS "TBB not found; StarPU target will not automatically link TBB")
+  endif()
   message(STATUS "STARPU_FOUND=1")
 endif(TARGET MyProject::StarPU)
 # PaRSEC
