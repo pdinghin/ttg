@@ -212,7 +212,6 @@ if (TARGET MADworld)
           PUBLIC_HEADER "${ttg-serialization-headers}"
           LINK_LIBRARIES "MADworld"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_MADNESS=1")
-          message(STATUS "===================== Serialization added Mad ================================")
 endif(TARGET MADworld)
 # make boost-only serialization target
 if ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) AND TARGET Boost::serialization AND (USE_PARSEC OR USE_STARPU))
@@ -221,7 +220,6 @@ if ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) A
           PUBLIC_HEADER "${ttg-serialization-headers}"
           LINK_LIBRARIES "${ttg-serialization-boost-deps}"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_BOOST=1")
-          message(STATUS "===================== Serialization added 2222 ================================")
 endif ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) AND TARGET Boost::serialization AND (USE_PARSEC OR USE_STARPU))
 
 #########################
