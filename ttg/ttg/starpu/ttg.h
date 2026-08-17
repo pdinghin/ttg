@@ -221,14 +221,14 @@ namespace ttg_starpu {
 
 
     int query_comm_size() {
-      int comm_size;
-      MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
+      int comm_size = 1;
+      //MPI_Comm_size(MPI_COMM_WORLD, &comm_size);
       return comm_size;
     }
 
     int query_comm_rank() {
-      int comm_rank;
-      MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
+      int comm_rank = 0;
+      //MPI_Comm_rank(MPI_COMM_WORLD, &comm_rank);
       return comm_rank;
     }
 
