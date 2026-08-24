@@ -518,6 +518,7 @@ namespace ttg_starpu {
         transfer_ownership<TT>(me, 0, std::make_index_sequence<std::tuple_size_v<typename TT::input_values_tuple_type>>{});
       }
       me->template invoke_op<ttg::ExecutionSpace::Host>();
+      me->tt->complete_task_and_release(me);
     }
 
     template <typename KeyT, typename ActivationCallbackT>
@@ -2847,13 +2848,11 @@ namespace ttg_starpu {
 
 
 
-    //parsec_key_fn_t tasks_hash_fcts = {key_equal, key_print, key_hash};
-
-    static starpu_hook_return_t complete_task_and_release(void *es, starpu_task_t *starpu_task) {
+    public:
+    int complete_task_and_release(task_t *task) {
 
       //std::cout << "complete_task_and_release: task " << starpu_task << std::endl;
 
-      task_t *task = (task_t*)starpu_task;
 
 #ifdef TTG_HAVE_COROUTINE
       /* if we still have a coroutine handle we invoke it one more time to get the sends/broadcasts */
@@ -2879,10 +2878,9 @@ namespace ttg_starpu {
           c(task->key);
         }
       }
-      return 0;//PA_HOOK_RETURN_DONE
+      return 0;
     }
 
-   public:
     template <typename keymapT = ttg::detail::default_keymap<keyT>,
               typename priomapT = ttg::detail::default_priomap<keyT>>
     TT(const std::string &name, const std::vector<std::string> &innames, const std::vector<std::string> &outnames,
