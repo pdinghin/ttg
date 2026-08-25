@@ -1515,10 +1515,10 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
               << " average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " t= " << minTs << " T=" << maxTs << " Tiling= " << tiling_type
               << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
-              << " gflops/s= " << gflops / tc << std::endl;
+              << " gflops/s= " << gflops / tc << " num threads = " << ttg::detail::num_threads() << std::endl;
     std::string filename("spmm_test.txt");
     std::ofstream outFile(filename, std::ios::app);
-    outFile << "TTG-" << rt << ";" << P << ";" << Q << ";" << R << ";" << ttg::device::num_devices() << ";" << avg_nb << ";"
+    outFile << "TTG-" << rt << ";" << P << ";" << Q << ";" << R << ";" << ttg::detail::num_threads() << ";" << avg_nb << ";"
             << M << ";" << N << ";" << K << ";" << minTs << ";" << maxTs << ";" << tiling_type << ";"
             << Adensity << ";" << Bdensity << ";" << gflops / tc
             << std::endl;
