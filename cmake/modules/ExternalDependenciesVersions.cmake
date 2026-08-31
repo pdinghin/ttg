@@ -14,7 +14,7 @@ set(STARPU_VERSION "1.4.12")
 # need Boost.CallableTraits (header only, part of Boost 1.66 released in Dec 2017) for wrap.h to work
 # BUT if will be building examples, inherit the oldest version from the pickiest Boost consumer (TA and/or BSPMM)
 if (TTG_EXAMPLES)
-  set(TTG_OLDEST_BOOST_VERSION 1.81)
+  set(TTG_OLDEST_BOOST_VERSION 1.87)
 else()
   set(TTG_OLDEST_BOOST_VERSION 1.66)
 endif()

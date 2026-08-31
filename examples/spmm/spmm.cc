@@ -9,6 +9,7 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+#include <fstream>
 
 #if __has_include(<btas/features.h>)
 #include <btas/features.h>
@@ -1504,6 +1505,8 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
   std::string rt("MAD");
 #elif defined(TTG_USE_PARSEC)
   std::string rt("PARSEC");
+#elif defined(TTG_USE_STARPU)
+  std::string rt("STARPU");
 #else
   std::string rt("Unkown???");
 #endif
@@ -1512,7 +1515,14 @@ static void timed_measurement(SpMatrix<> &A, SpMatrix<> &B, const std::function<
               << " average_NB= " << avg_nb << " M= " << M
               << " N= " << N << " K= " << K << " t= " << minTs << " T=" << maxTs << " Tiling= " << tiling_type
               << " A_density= " << Adensity << " B_density= " << Bdensity << " gflops= " << gflops << " seconds= " << tc
-              << " gflops/s= " << gflops / tc << std::endl;
+              << " gflops/s= " << gflops / tc << " num threads = " << ttg::detail::num_threads() << std::endl;
+    std::string filename("spmm_test.txt");
+    std::ofstream outFile(filename, std::ios::app);
+    outFile << "TTG-" << rt << ";" << P << ";" << Q << ";" << R << ";" << ttg::detail::num_threads() << ";" << avg_nb << ";"
+            << M << ";" << N << ";" << K << ";" << minTs << ";" << maxTs << ";" << tiling_type << ";"
+            << Adensity << ";" << Bdensity << ";" << gflops / tc
+            << std::endl;
+    outFile.close();
   }
 }
 

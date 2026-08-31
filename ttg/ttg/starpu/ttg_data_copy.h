@@ -9,18 +9,16 @@
 #include <atomic>
 #include <type_traits>
 
-#if defined(PARSEC_HAVE_DEV_CUDA_SUPPORT)
-#include <cuda_runtime.h>
-#endif // PARSEC_HAVE_DEV_CUDA_SUPPORT
 
-#include <parsec.h>
+#include <starpu.h>
 
-#include "ttg/parsec/thread_local.h"
-#include "ttg/parsec/parsec-ext.h"
+#include "ttg/starpu/thread_local.h"
+#include "ttg/starpu/starpu-ext.h"
 #include "ttg/util/span.h"
 
 
-namespace ttg_parsec {
+namespace ttg_starpu {
+
 
   namespace detail {
 
@@ -37,16 +35,14 @@ namespace ttg_parsec {
     };
 
     /* special type: stores a pointer to the ttg_data_copy_t. This is necessary
-     * because ttg_data_copy_t has virtual functions so we cannot cast from parsec_data_copy_t
+     * because ttg_data_copy_t has virtual functions so we cannot cast from starpu_data_copy_t
      * to ttg_data_copy_t (offsetof is not supported for virtual classes).
      * The self pointer is a back-pointer to the ttg_data_copy_t. */
     struct ttg_data_copy_self_t {
-      parsec_list_item_t super;
       ttg_data_copy_t *self;
       ttg_data_copy_self_t(ttg_data_copy_t* dc)
       : self(dc)
       {
-        PARSEC_OBJ_CONSTRUCT(&super, parsec_list_item_t);
       }
     };
 
@@ -120,9 +116,7 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int increment_readers() {
         if constexpr(Atomic) {
-          return parsec_atomic_fetch_inc_int32(&m_readers);
-//          std::atomic_ref<int32_t> a{m_readers};
-//          return a.fetch_add(1, std::memory_order_relaxed);
+          return __atomic_fetch_add(&m_readers, 1, __ATOMIC_ACQ_REL);
         } else {
           return m_readers++;
         }
@@ -143,11 +137,9 @@ namespace ttg_parsec {
       template<bool Atomic = true>
       int decrement_readers() {
         if constexpr(Atomic) {
-          return parsec_atomic_fetch_dec_int32(&m_readers);
-//          std::atomic_ref<int32_t> a{m_readers};
-//          return a.fetch_sub(1, std::memory_order_relaxed);
+          return __atomic_fetch_sub(&m_readers, 1, __ATOMIC_ACQ_REL);
         } else {
-          return m_readers--;
+          return m_readers --;
         }
       }
 
@@ -160,11 +152,11 @@ namespace ttg_parsec {
       /* Returns the pointer to the user data wrapped by the the copy object */
       virtual void* get_ptr() = 0;
 
-      parsec_task_t* get_next_task() const {
+      starpu_task_t* get_next_task() const {
         return m_next_task;
       }
 
-      void set_next_task(parsec_task_t* task) {
+      void set_next_task(starpu_task_t* task) {
         m_next_task = task;
       }
 
@@ -184,13 +176,10 @@ namespace ttg_parsec {
         return m_refs.load(std::memory_order_relaxed);
       }
 
-#if defined(PARSEC_PROF_TRACE) && defined(PARSEC_TTG_PROFILE_BACKEND)
-      int64_t size;
-      int64_t uid;
-#endif
+
     protected:
-      parsec_task_t *m_next_task = nullptr;
-      int32_t        m_readers  = 1;
+      starpu_task_t *m_next_task = nullptr;
+      int32_t     m_readers  = 1;
       std::atomic<int32_t>  m_refs = 1;                     //< number of entities referencing this copy (TTGs, external)
     };
 
@@ -272,6 +261,6 @@ namespace ttg_parsec {
     };
   } // namespace detail
 
-} // namespace ttg_parsec
+} // namespace ttg_starpu
 
 #endif // TTG_DATA_COPY_H

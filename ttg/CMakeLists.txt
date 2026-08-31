@@ -190,7 +190,7 @@ if (TARGET MADworld)
   list(APPEND ttg-serialization-deps MADworld)
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_MADNESS=1)
 endif(TARGET MADworld)
-if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
+if ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) AND TARGET Boost::serialization AND (USE_PARSEC OR USE_STARPU))
   list(APPEND ttg-serialization-deps Boost::serialization)
   list(APPEND ttg-serialization-boost-deps Boost::serialization)
   if (TARGET Boost::iostreams)  # using modularized Boost?
@@ -198,7 +198,7 @@ if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_P
       list(APPEND ttg-serialization-boost-deps Boost::iostreams)
   endif()
   list(APPEND ttg-serialization-compile-definitions TTG_SERIALIZATION_SUPPORTS_BOOST=1)
-endif (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
+endif ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) AND TARGET Boost::serialization AND (USE_PARSEC OR USE_STARPU))
 
 add_ttg_library(ttg-serialization
                 "${ttg-serialization-sources}"
@@ -214,13 +214,13 @@ if (TARGET MADworld)
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_MADNESS=1")
 endif(TARGET MADworld)
 # make boost-only serialization target
-if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
+if ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) AND TARGET Boost::serialization AND (USE_PARSEC OR USE_STARPU))
   add_ttg_library(ttg-serialization-boost
           "${ttg-serialization-sources}"
           PUBLIC_HEADER "${ttg-serialization-headers}"
           LINK_LIBRARIES "${ttg-serialization-boost-deps}"
           COMPILE_DEFINITIONS "TTG_SERIALIZATION_SUPPORTS_BOOST=1")
-endif(TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET Boost::serialization AND USE_PARSEC)
+endif ((TTG_PARSEC_USE_BOOST_SERIALIZATION OR TTG_STARPU_USE_BOOST_SERIALIZATION) AND TARGET Boost::serialization AND (USE_PARSEC OR USE_STARPU))
 
 #########################
 ####### MADNESS-specific
@@ -282,14 +282,15 @@ endif(TARGET PaRSEC::parsec)
 if(TARGET MyProject::StarPU)
   set(ttg-starpu-headers
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/buffer.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/starpu_hash_table.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/device.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/devicefunc.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/devicescratch.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/fwd.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/import.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ptr.h
-          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/parsec-ext.h
-          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/parsec_data.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/starpu-ext.h
+          ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/starpu_data.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/task.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/thread_local.h
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ttg.h
@@ -297,15 +298,14 @@ if(TARGET MyProject::StarPU)
           ${CMAKE_CURRENT_SOURCE_DIR}/ttg/starpu/ttvalue.h
           )
   find_package(MPI)
-  set(ttg-starpu-deps "ttg;MPI::MPI_CXX;MyProject::StarPU")
-  # parsec depends on TTG's serialization layer since it does not provide its own
-  # if (TTG_PARSEC_USE_BOOST_SERIALIZATION AND TARGET ttg-serialization-boost)
-  #   list(APPEND ttg-parsec-deps ttg-serialization-boost)
-  # elseif(TARGET ttg-serialization-madness)
-  #   list(APPEND ttg-parsec-deps ttg-serialization-madness)
-  # else()
-  #   message(WARNING "missing full-featured serialization support for ttg-parsec: either TTG_PARSEC_USE_BOOST_SERIALIZATION=OFF or Boost not found, and MADNESS not found")
-  # endif()
+  set(ttg-starpu-deps "ttg;MPI::MPI_CXX;MyProject::StarPU;Boost::headers")
+  if (TTG_STARPU_USE_BOOST_SERIALIZATION AND TARGET ttg-serialization-boost)
+    list(APPEND ttg-starpu-deps ttg-serialization-boost)
+  elseif(TARGET ttg-serialization-madness)
+    list(APPEND ttg-starpu-deps ttg-serialization-madness)
+  else()
+    message(WARNING "missing full-featured serialization support for ttg-starpu: either TTG_STARPU_USE_BOOST_SERIALIZATION=OFF or Boost not found, and MADNESS not found")
+  endif()
   add_ttg_library(ttg-starpu "${ttg-starpu-headers}"
                   PUBLIC_HEADER "${ttg-starpu-headers}"
                   LINK_LIBRARIES "${ttg-starpu-deps}"

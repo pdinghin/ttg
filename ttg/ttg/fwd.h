@@ -17,6 +17,8 @@ namespace ttg {}
 namespace ttg_madness {}
 /// this contains PaRSEC-based TTG functionality
 namespace ttg_parsec {}
+/// @brief  this contains StarPU-based TTG functionnality
+namespace ttg_starpu {}
 
 // classes + functions /////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -62,6 +64,9 @@ namespace ttg {
 #endif
 #if TTG_USE_MADNESS
 #include "ttg/madness/fwd.h"
+#endif
+#if TTG_USE_STARPU
+#include "ttg/starpu/fwd.h"
 #endif
 
 #endif  // TTG_FWD_H

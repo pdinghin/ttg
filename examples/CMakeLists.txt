@@ -75,6 +75,7 @@ add_ttg_executable(wavefront-pull wavefront/wavefront-pull.cc LINK_LIBRARIES MAD
 add_ttg_executable(fw-apsp floyd-warshall/floyd_warshall.cc LINK_LIBRARIES MADworld SINGLERANKONLY)
 add_ttg_executable(helloworld helloworld/helloworld.cpp)
 add_ttg_executable(simplegenerator simplegenerator/simplegenerator.cc RUNTIMES "mad")
+add_ttg_executable(simple_reduction starpu_hashmap_test/simple_reduction.cc)
 
 if (TARGET std::execution)
         add_ttg_executable(fw-apsp-df floyd-warshall/floyd_warshall_df.cc LINK_LIBRARIES std::execution MADworld)
@@ -89,4 +90,5 @@ add_ttg_executable(sw sw/sw.cc)
 if (TARGET MADworld)
   add_ttg_executable(randomaccess randomaccess/randomaccess.cc RUNTIMES "mad")
 endif (TARGET MADworld)
+
 

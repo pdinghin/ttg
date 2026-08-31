@@ -7,9 +7,11 @@
 
 #if defined(TTG_USE_PARSEC)
 #include "ttg/parsec/ttg.h"
+#elif defined(TTG_USE_STARPU)
+#include "ttg/starpu/ttg.h"
 #elif defined(TTG_USE_MADNESS)
 #include "ttg/madness/ttg.h"
-#endif  // TTG_USE_{PARSEC|MADNESS}
+#endif  // TTG_USE_{PARSEC|STARPU|MADNESS}
 
 #include "ttg/runtimes.h"
 #include "ttg/util/demangle.h"

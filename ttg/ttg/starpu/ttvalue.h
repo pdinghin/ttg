@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: BSD-3-Clause
-#ifndef TTG_PARSEC_TTVALUE_H
-#define TTG_PARSEC_TTVALUE_H
+#ifndef TTG_STARPU_TTVALUE_H
+#define TTG_STARPU_TTVALUE_H
 
 #include <type_traits>
 
-#include "ttg/parsec/ttg_data_copy.h"
+#include "ttg/starpu/ttg_data_copy.h"
 
-namespace ttg_parsec {
+namespace ttg_starpu {
 
   /**
    * Base class for data to moved into, through, and out of
@@ -15,8 +15,8 @@ namespace ttg_parsec {
    * of the copies otherwise necessary.
    */
   template<typename DerivedT>
-  struct TTValue : private ttg_parsec::detail::ttg_data_copy_container_setter<ttg_parsec::detail::ttg_data_copy_t>
-                 , public ttg_parsec::detail::ttg_data_copy_t {
+  struct TTValue : private ttg_starpu::detail::ttg_data_copy_container_setter<ttg_starpu::detail::ttg_data_copy_t>
+                 , public ttg_starpu::detail::ttg_data_copy_t {
 
     using derived_type = std::decay_t<DerivedT>;
 
@@ -43,14 +43,14 @@ namespace ttg_parsec {
 
     /* default copy operator */
     TTValue& operator=(const TTValue& v) {
-      ttg_parsec::detail::ttg_data_copy_container() = this;
+      ttg_starpu::detail::ttg_data_copy_container() = this;
       ttg_data_copy_t::operator=(v);
       return *this;
     }
 
     /* default move operator */
     TTValue& operator=(TTValue&& v) {
-      ttg_parsec::detail::ttg_data_copy_container() = this;
+      ttg_starpu::detail::ttg_data_copy_container() = this;
       ttg_data_copy_t::operator=(std::move(v));
       return *this;
     }
@@ -99,6 +99,6 @@ namespace ttg_parsec {
     }
   }
 
-} // namespace ttg_parsec
+} // namespace ttg_starpu
 
-#endif // TTG_PARSEC_TTVALUE_H
+#endif // TTG_STARPU_TTVALUE_H
