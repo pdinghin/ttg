@@ -33,8 +33,7 @@ private:
   element_type* m_ptr = nullptr;
   ttg::scope m_scope = ttg::scope::SyncIn;
   std::size_t m_count = 1;
-  // TODO: Add StarPU data handle when device support is implemented
-  // starpu_data_handle_t m_handle = nullptr;
+  starpu_data_handle_t m_handle = nullptr;
 
 public:
   /* Constructing a devicescratch using application-managed memory.
@@ -45,7 +44,11 @@ public:
   , m_scope(scope)
   , m_count(count)
   {
-    // TODO: Register memory with StarPU when device support is enabled
+    if (m_ptr != nullptr) {
+      starpu_vector_data_register(&m_handle, STARPU_MAIN_RAM,
+                                  reinterpret_cast<uintptr_t>(m_ptr),
+                                  static_cast<uint32_t>(m_count), sizeof(element_type));
+    }
   }
   /* don't allow moving */
   devicescratch(devicescratch&&) = delete;
@@ -57,7 +60,9 @@ public:
   devicescratch& operator=(const devicescratch& db) = delete;
 
   ~devicescratch() {
-    // TODO: Unregister memory from StarPU
+    if (m_handle != nullptr) {
+      starpu_data_unregister(m_handle);
+    }
     m_ptr = nullptr;
   }
 
@@ -91,8 +96,7 @@ public:
 namespace detail {
   template<typename T>
   void* get_starpu_data(const ttg_starpu::devicescratch<T>& scratch) {
-    // TODO: Return StarPU data handle when implemented
-    return const_cast<typename ttg_starpu::devicescratch<T>::element_type*>(scratch.m_ptr);
+    return const_cast<void*>(reinterpret_cast<const void*>(&scratch.m_handle));
   }
 } // namespace detail
 
